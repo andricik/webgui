@@ -341,6 +341,7 @@ Removes the specified session from memory and database.
 sub end {
     my $self = shift;
     my $id = $self->getId;
+    return unless $id;
     $self->cache->remove($id);
     $self->scratch->deleteAll;
     $self->db->write("delete from userSession where sessionId=?",[$id]);
