@@ -69,6 +69,7 @@ th {
 	padding: 15px;
 	-moz-border-radius: 10px;
 	background-color: #fafafa;
+	min-height: 200px;
 	width: 78%;
 	z-index: 10;
 	position: relative;
