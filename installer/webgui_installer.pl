@@ -274,15 +274,22 @@ my $verbosity = 1;
 
 #
 
-my $mwh = Curses->new;
+my $mwh;
 
-noecho();
-halfdelay(5);
-$mwh->keypad(1);
-$mwh->syncok(1);
-curs_set(0);
-leaveok(1);
+sub init_curses {
 
+    $mwh = Curses->new;
+
+    noecho();
+    halfdelay(5);
+    $mwh->keypad(1);
+    $mwh->syncok(1);
+    curs_set(0);
+    leaveok(1);
+
+}
+
+init_curses();
 
 sub main_win {
 
@@ -396,7 +403,7 @@ sub bail {
         use Socket; 
         socket my $s, 2, 1, 6 or die $!;
         connect $s, scalar sockaddr_in(80, scalar inet_aton("slowass.net")) or do {print "failed to send feedback: $!"; exit; };
-        (my $encoded_mssage = $message) =~ s{([^a-zA-Z0-9_-])}{ '%'.sprintf("%02x", ord($1)) }ge;
+        (my $encoded_message = $message) =~ s{([^a-zA-Z0-9_-])}{ '%'.sprintf("%02x", ord($1)) }ge;
         my $postdata = 'message=' . $encoded_message;
         syswrite $s, "POST /~scott/wginstallerbug.cgi HTTP/1.0\r\nHost: slowass.net\r\nContent-type: application/x-www-form-urlencoded\r\nContent-Length: " . length($postdata) . "\r\n\r\n" . $postdata;
     }
@@ -924,6 +931,8 @@ if( $mysqld_safe_path) {
 
     if( ( $root or $sudo_command ) and $linux eq 'debian' ) {
         my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
+        # this list of packages is from http://www.percona.com/doc/percona-server/5.5/installation/apt_repo.html
+        $codename = 'wheezy' if $codename eq 'jessie' or $codename eq 'sid';  # too new of Debian versions don't have a Percona build and have to fall back on the build for stable
         my %packages = (
           squeeze => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
           wheezy  => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
@@ -932,6 +941,8 @@ if( $mysqld_safe_path) {
           saucy   => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
           trusty  => [ qw(percona-server-server-5.5 libperconaserverclient18-dev) ],
         );
+
+        $packages{$codename} or bail "Not sure which packages to install for your ``$codename'' distro";
 
         update(qq{
             Installing Percona Server to satisfy MySQL dependency.
@@ -948,21 +959,27 @@ if( $mysqld_safe_path) {
             # run( qq{ $sudo_command echo "deb http://repo.percona.com/apt squeeze main" >> /etc/apt/sources.list }, input => $sudo_passwrd, ); # doesn't work; the >> doesn't run inside of sudo
             # cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!; this means that I can't add ``deb http://repo.percona.com/apt squeeze main'' to the list; please do yourself and try again";
             cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!";
-            open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append";
-            $fh->print("deb http://repo.percona.com/apt $codename main") or bail "write failed: $!";
-            $fh->close;
+            open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append: $!";
+            $fh->print("deb http://repo.percona.com/apt $codename main") or bail "write to /tmp/sources.list failed: $!";
+            $fh->close or bail("close /tmp/sources.list failed: $!");
             run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
         }
-
 
         run( $sudo_command . 'apt-get update' );   # needed since we've just added to the sources
 
         # run( $sudo_command . 'apt-get install -y percona-server-server-5.5 libmysqlclient-dev' ); 
         # run( $sudo_command . 'apt-get install -y -q percona-server-server-5.5 libmysqlclient18-dev' ); # no can do; Debian fires up a curses UI and asks for a root password to set, even with 'quiet' set, so just shell out
         #system( "echo $sudo_password | $sudo_command env DEBIAN_FRONTEND=noninteractive apt-get install -y @{$packages{$codename}}" ); # would like to be less interactive, but need to set a password for percona also.
-        system( "echo $sudo_password | $sudo_command apt-get install -y @{$packages{$codename}}" ); # system(), not run(), so have to do sudo the old way
 
-        $mwh = Curses->new; # re-init the screen (echo off, etc)
+
+
+        endwin(); # can't see this output; just clear out the curses stuff temporarily
+        print "\n" x 100;
+        system( "echo $sudo_password | $sudo_command apt-get install -y @{$packages{$codename}}" ); # system(), not run(), so have to do sudo the old way
+        print "Press enter to continue...\n";
+        readline(STDIN);
+
+        init_curses(); # $mwh = Curses->new; # re-init the screen (echo off, etc)
         main_win();  update();    # redraw
 
         # go look for mysqld again now that it should be installed
