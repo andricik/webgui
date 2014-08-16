@@ -932,34 +932,37 @@ if( $mysqld_safe_path) {
     # install and set up MySQL
 
     if( ( $root or $sudo_command ) and $linux eq 'debian' ) {
-        my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
-        $codename = 'wheezy'; # XXX argh, but https://downloads.mariadb.org/mariadb/repositories/ lies and gives broken sources that don't exist in http://ftp.utexas.edu/mariadb/repo/10.1/debian/dists/.  wheezy is currently the newest one offered... just like Percona.
+
+        # my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
 
         update(qq{
-            Installing MariaDB to satisfy MySQL dependency.
-            This step adds the mariadb repo to your /etc/apt/sources.list (if it isn't there already) and then
-            installs the packages mariadb-server and python-software-properties.
+            Installing MySQL
+            Write down the MySQL root password.
+            You'll need it to manage MySQL and to complete this setup.
         });
 
         # per instructions at https://downloads.mariadb.org/mariadb/repositories/
-        run( "$sudo_command apt-get install -y python-software-properties" ); 
-        run( "$sudo_command gpg --keyserver  hkp://keyserver.ubuntu.com --recv-keys 0xcbcb082a1bb943db", input => $sudo_password, );
-        run( "$sudo_command gpg -a --export CD2EFD2A | $sudo_command apt-key add -", input => $sudo_password, );
+        # run( "$sudo_command apt-get install -y python-software-properties" ); 
+        # run( "$sudo_command gpg --keyserver  hkp://keyserver.ubuntu.com --recv-keys 0xcbcb082a1bb943db", input => $sudo_password, );
+        # run( "$sudo_command gpg -a --export CD2EFD2A | $sudo_command apt-key add -", input => $sudo_password, );
 
-        if( ! `grep 'http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian' /etc/apt/sources.list` ) {
-            # newer versions of Debian allow this:  sudo add-apt-repository 'deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main'
-            cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!";
-            open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append: $!";
-            $fh->print("deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main") or bail "write to /tmp/sources.list failed: $!";
-            $fh->close or bail("close /tmp/sources.list failed: $!");
-            run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
-        }
+        # if( ! `grep 'http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian' /etc/apt/sources.list` ) {
+        #     # newer versions of Debian allow this:  sudo add-apt-repository 'deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main'
+        #     cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!";
+        #     open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append: $!";
+        #     $fh->print("deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main") or bail "write to /tmp/sources.list failed: $!";
+        #     $fh->close or bail("close /tmp/sources.list failed: $!");
+        #     run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
+        # }
 
-        run( $sudo_command . 'apt-get update' );   # needed since we've just added to the sources
+        # run( $sudo_command . 'apt-get update' );   # needed since we've just added to the sources
 
         endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
         print "\n" x 100;
-        system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
+        # system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
+
+        run("$sudo_command apt-get install -y mysql-client mysql-server");
+
         print "Press enter to continue...\n";
         readline(STDIN);
 
@@ -974,9 +977,6 @@ if( $mysqld_safe_path) {
     } elsif( ( $root or $sudo_command ) and $linux eq 'redhat' ) {
 
         run( "$sudo_command yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
-        # or else
-        # run( "$sudo_command rpm -Uhv --skip-broken http://www.percona.com/downloads/percona-release/percona-release-0.0-1.i386.rpm" ); # -Uhv is upgrade, help, version...?  seems odd... and nothing about aliasing mysql to percona but then after this, attempts to install mysql stuff install more percona stuff and things get wedged
-        # run( "$sudo_command yum install -y Percona-Server-{server,client,shared,devel}-55" );
 
         # have to start mysqld; rpm doesn't do it
 
