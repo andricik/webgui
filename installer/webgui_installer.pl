@@ -96,6 +96,8 @@ use FindBin qw($Bin);
 
 my $perl;
 
+my $mariadb_version = '10.1';
+
 #
 # some probes
 #
@@ -408,7 +410,7 @@ sub bail {
         syswrite $s, "POST /~scott/wginstallerbug.cgi HTTP/1.0\r\nHost: slowass.net\r\nContent-type: application/x-www-form-urlencoded\r\nContent-Length: " . length($postdata) . "\r\n\r\n" . $postdata;
     }
     endwin();
-    print $message;
+    print $message, "\n";
     exit 1;
 }
 
@@ -931,51 +933,33 @@ if( $mysqld_safe_path) {
 
     if( ( $root or $sudo_command ) and $linux eq 'debian' ) {
         my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
-        # this list of packages is from http://www.percona.com/doc/percona-server/5.5/installation/apt_repo.html
-        $codename = 'wheezy' if $codename eq 'jessie' or $codename eq 'sid';  # too new of Debian versions don't have a Percona build and have to fall back on the build for stable
-        my %packages = (
-          squeeze => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
-          wheezy  => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
-          lucid   => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
-          precise => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
-          saucy   => [ qw(percona-server-server-5.5 libmysqlclient18-dev) ],
-          trusty  => [ qw(percona-server-server-5.5 libperconaserverclient18-dev) ],
-        );
-
-        $packages{$codename} or bail "Not sure which packages to install for your ``$codename'' distro";
+        $codename = 'wheezy'; # XXX argh, but https://downloads.mariadb.org/mariadb/repositories/ lies and gives broken sources that don't exist in http://ftp.utexas.edu/mariadb/repo/10.1/debian/dists/.  wheezy is currently the newest one offered... just like Percona.
 
         update(qq{
-            Installing Percona Server to satisfy MySQL dependency.
-            This step adds the percona repo to your /etc/apt/sources.list (if it isn't there already) and then
-            installs the packages percona-server-server-5.5 and libmysqlclient18-dev.
+            Installing MariaDB to satisfy MySQL dependency.
+            This step adds the mariadb repo to your /etc/apt/sources.list (if it isn't there already) and then
+            installs the packages mariadb-server and python-software-properties.
         });
 
-        # percona mysql 5.5
-
-        run( "$sudo_command gpg --keyserver  hkp://keys.gnupg.net --recv-keys 1C4CBDCDCD2EFD2A", input => $sudo_password, );
+        # per instructions at https://downloads.mariadb.org/mariadb/repositories/
+        run( "$sudo_command apt-get install -y python-software-properties" ); 
+        run( "$sudo_command gpg --keyserver  hkp://keyserver.ubuntu.com --recv-keys 0xcbcb082a1bb943db", input => $sudo_password, );
         run( "$sudo_command gpg -a --export CD2EFD2A | $sudo_command apt-key add -", input => $sudo_password, );
 
-        if( ! `grep 'http://repo.percona.com/apt' /etc/apt/sources.list` ) {
-            # run( qq{ $sudo_command echo "deb http://repo.percona.com/apt squeeze main" >> /etc/apt/sources.list }, input => $sudo_passwrd, ); # doesn't work; the >> doesn't run inside of sudo
-            # cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!; this means that I can't add ``deb http://repo.percona.com/apt squeeze main'' to the list; please do yourself and try again";
+        if( ! `grep 'http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian' /etc/apt/sources.list` ) {
+            # newer versions of Debian allow this:  sudo add-apt-repository 'deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main'
             cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!";
             open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append: $!";
-            $fh->print("deb http://repo.percona.com/apt $codename main") or bail "write to /tmp/sources.list failed: $!";
+            $fh->print("deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main") or bail "write to /tmp/sources.list failed: $!";
             $fh->close or bail("close /tmp/sources.list failed: $!");
             run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
         }
 
         run( $sudo_command . 'apt-get update' );   # needed since we've just added to the sources
 
-        # run( $sudo_command . 'apt-get install -y percona-server-server-5.5 libmysqlclient-dev' ); 
-        # run( $sudo_command . 'apt-get install -y -q percona-server-server-5.5 libmysqlclient18-dev' ); # no can do; Debian fires up a curses UI and asks for a root password to set, even with 'quiet' set, so just shell out
-        #system( "echo $sudo_password | $sudo_command env DEBIAN_FRONTEND=noninteractive apt-get install -y @{$packages{$codename}}" ); # would like to be less interactive, but need to set a password for percona also.
-
-
-
-        endwin(); # can't see this output; just clear out the curses stuff temporarily
+        endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
         print "\n" x 100;
-        system( "echo $sudo_password | $sudo_command apt-get install -y @{$packages{$codename}}" ); # system(), not run(), so have to do sudo the old way
+        system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
         print "Press enter to continue...\n";
         readline(STDIN);
 
@@ -989,7 +973,6 @@ if( $mysqld_safe_path) {
 
     } elsif( ( $root or $sudo_command ) and $linux eq 'redhat' ) {
 
-        # figure out if they have either mysql or percona and use whichever they have if they have one?  only install one if they don't have either XXX
         run( "$sudo_command yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
         # or else
         # run( "$sudo_command rpm -Uhv --skip-broken http://www.percona.com/downloads/percona-release/percona-release-0.0-1.i386.rpm" ); # -Uhv is upgrade, help, version...?  seems odd... and nothing about aliasing mysql to percona but then after this, attempts to install mysql stuff install more percona stuff and things get wedged
@@ -1020,7 +1003,7 @@ EOF
 
     } else {
         update(qq{
-            MySQL/Percona not found.  Please use another terminal window (or control-Z this one) to install one of them, and then hit enter to continue.
+            MySQL/MariaDB/Percona not found.  Please use another terminal window (or control-Z this one) to install one of them, and then hit enter to continue.
         });
         scankey($mwh);
         goto scan_for_mysqld;
