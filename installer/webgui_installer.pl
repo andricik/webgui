@@ -441,6 +441,17 @@ sub run {
     my $nofatal = delete $opts{nofatal};
     my $input = delete $opts{input};
     my $background = delete $opts{background};
+    my $nocurses = delete $opts{nocurses};
+    my $stdin = delete $opts{stdin};
+
+    goto normal_curses_mode if ! $nocurses;
+        # we're running outside of the curses UI; do plain text stuff instead
+        # can't put this stuff in a block or else the locals would only be effect until it, so we have to abuse goto instead.
+        local *update = sub { print $_[0], "\n"; };
+        local *main_win = sub { };
+        local *tail = sub { $_[0] };
+        local *scankey = sub { readline STDIN; };
+    normal_curses_mode:
 
     $noprompt = 1 if $verbosity < 0;  # ultra-low verbosity; only text boxes and such get shown
 
@@ -483,42 +494,54 @@ sub run {
     $to_child->print($input) if $input; # XXX to be safe, this would have to be done in an event loop or fork
 
     my $exit = '';
-    close $to_child or $exit = $! ? "Error closing pipe: $!" : "Exit status $? from pipe";
+#    if( $stdin ) {
+#        # provide STDIN to the child until it exits
+#        # this vaguely works a little but its really spazzy; may try flushing?
+#        if( ! fork ) {
+#            # chlid process
+#            while( read STDIN, my $buf, 1 ) {
+#                $to_child->print($buf);
+#                $to_child->flush;
+#            }
+#            exit;
+#        }
+#    } else {
+#        close $to_child or $exit = $! ? "Error closing pipe: $!" : "Exit status $? from pipe";
+#    }
 
     my $output = '';
 
     my $sel = IO::Select->new();
     $sel->add($fh);
     $sel->add($fh_error);
+    $sel->add(*STDIN{IO}) if $stdin;
 
     while (my @read_fhs = $sel->can_read()) {
 
-    # well that's miserable... IO::Select won't select on read and error at the same time
-    #while(1) {
-#
-#        my $read_bits = $sel->[IO::Select::VEC_BITS];
-#        my $error_bits = $sel->[IO::Select::VEC_BITS];
-#        select( $read_bits, undef, $error_bits, undef );
-#        my @read_fhs = $sel->handles($read_bits);
-#        my @error_fhs = $sel->handles($error_bits);
+        # well that's miserable... IO::Select won't select on read and error at the same time
 
         my $buf;
         for my $handle (@read_fhs) {
 
             # handle may == $fh or $fh_error
-            my $handle_name = $handle == $fh ? 'STDOUT' : $handle == $fh_error ? 'STDERR' : 'unknown';
+            my $handle_name = $handle == $fh ? "child's STDOUT" : $handle == $fh_error ? "child's STDERR" : $handle == *STDIN{IO} ? "installer STDIN" : 'unknown';
             my $bytes_read = sysread($handle, $buf, 1024);
             if ($bytes_read == -1) {
-               # $output .= "\n[Child's $handle_name closed]\n"; # XXX debug
+               # $output .= "\n[$handle_name closed]\n"; # XXX debug
                $sel->remove($handle);
                next;
             }
             if ($bytes_read == 0) {
-               # $output .= "\n[Child's $handle_name read error]\n"; # XXX
+               # $output .= "\n[$handle_name read error]\n"; # XXX
                $sel->remove($handle);
                next;
             }
-            $output .= $buf;
+            if( $handle eq 'installer STDIN') {   # XXX instead of doing this if $stdin is set (and that arg passed), this does it all of the time
+                $to_child->print($buf);
+                $to_child->flush;
+            } else {
+                $output .= $buf;
+            }
         }
 
 #        last if @error_fhs;  # when the client starts closing stuff, it's done
@@ -533,7 +556,7 @@ sub run {
     $exit .= " Exit status @{[ $? >> 8 ]} from pipe" if $?;
 
     if( $exit and ! $nofatal ) {
-        # XXX generate a failure report email in this case?
+        # generate a failure report email
         bail $msg . "\n$cmd:\n$output\nExit code $exit indicates failure." ;
     } elsif( $exit and $nofatal ) {
         update( tail( $msg . "\n$cmd:\n$output\nExit code $exit indicates failure.\nHit Enter to continue." ) );
@@ -939,7 +962,9 @@ if( $mysqld_safe_path) {
             Installing MySQL
             Write down the MySQL root password.
             You'll need it to manage MySQL and to complete this setup.
+            Installing these packages:  mysql-client mysql-server
         });
+        scankey($mwh);
 
         # per instructions at https://downloads.mariadb.org/mariadb/repositories/
         # run( "$sudo_command apt-get install -y python-software-properties" ); 
@@ -961,7 +986,7 @@ if( $mysqld_safe_path) {
         print "\n" x 100;
         # system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
 
-        run("$sudo_command apt-get install -y mysql-client mysql-server");
+        run("$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, );
 
         print "Press enter to continue...\n";
         readline(STDIN);
