@@ -4,14 +4,14 @@
 
 # yum install wget
 # yum install perl
-# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate 
+# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate    XXX no longer where it lives
 # perl webgui_installer.pl
 
 # to run this installer on Debian, do:
 
 # apt-get install wget
 # apt-get install perl 
-# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate 
+# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate    XXX no longer where it lives
 # perl webgui_installer.pl
 
 # The full README is here:
@@ -257,7 +257,7 @@ use Curses::Widgets::ProgressBar;
 
 use Carp;
 
-use IO::Select;
+# use IO::Select;
 use IPC::Open3;
 
 # use WRE::Config;
@@ -494,60 +494,89 @@ sub run {
     $to_child->print($input) if $input; # XXX to be safe, this would have to be done in an event loop or fork
 
     my $exit = '';
-#    if( $stdin ) {
-#        # provide STDIN to the child until it exits
-#        # this vaguely works a little but its really spazzy; may try flushing?
-#        if( ! fork ) {
-#            # chlid process
-#            while( read STDIN, my $buf, 1 ) {
-#                $to_child->print($buf);
-#                $to_child->flush;
-#            }
-#            exit;
-#        }
-#    } else {
-#        close $to_child or $exit = $! ? "Error closing pipe: $!" : "Exit status $? from pipe";
-#    }
 
     my $output = '';
 
-    my $sel = IO::Select->new();
-    $sel->add($fh);
-    $sel->add($fh_error);
-    $sel->add(*STDIN{IO}) if $stdin;
+    $to_child = *{$to_child}{IO} if ref($to_child) eq 'GLOB';  # pick the filehandle reference out of the glob if it's a glob for no real reason
 
-    while (my @read_fhs = $sel->can_read()) {
+    my $read_bits_o = '';   for( $fh, $fh_error, *STDIN{IO} ) { next if ! $_;  vec($read_bits_o, fileno($_), 1) = 1; }
+    my $write_bits_o = '';  for( $to_child) { next if ! $_; vec($write_bits_o, fileno($_), 1) = 1; }
+    my $error_bits_o = '';  for( $fh, $fh_error, *STDIN{IO}, $to_child ) { next if ! $_;  vec($error_bits_o, fileno($_), 1) = 1; }
 
-        # well that's miserable... IO::Select won't select on read and error at the same time
+    # warn "to_child is false" unless $to_child;
+    # warn "fh_error is false" unless $fh_error;
+
+    # my $child_is_alive = 1;
+    # $SIG{CHLD} = sub { warn "SIGCHILD!"; $child_is_alive = 0; };  # open3() does the waitpid() call so we don't have to; this gets called, but handle read errors on the child's STDOUT seems to be a more elegent way to exit the loop; otherwise the loop just gets stuck waiting for STDIN from the console.
+
+    STDIN->blocking(0);
+
+  select_loop:
+    while (1) {
+
+        my $read_bits = $read_bits_o;
+        my $write_bits = $write_bits_o;
+        my $error_bits = $error_bits_o;
+
+        # warn "calling select";
+        my $num_found = select $read_bits, $write_bits, $error_bits, 0.2;
+
+        # warn "fh: @{[ $fh || 'undef' ]} fh_error: @{[ $fh_error || 'undef' ]} STDIN: @{[ *STDIN{IO} || 'undef' ]} to_child: @{[ $to_child || 'undef' ]}";
 
         my $buf;
-        for my $handle (@read_fhs) {
 
-            # handle may == $fh or $fh_error
-            my $handle_name = $handle == $fh ? "child's STDOUT" : $handle == $fh_error ? "child's STDERR" : $handle == *STDIN{IO} ? "installer STDIN" : 'unknown';
+        # read from readable filehandles
+        # we intentionally check STDIN last so we don't wind up blocking for console input when the child has gone away
+
+        for my $handle ( $fh, $fh_error, *STDIN{IO} ) {
+
+            next unless $handle;
+            vec(my $bit_for_this_handle = '', fileno($handle), 1) = 1;
+            next unless $read_bits & $bit_for_this_handle;
+
+            # next if $handle == $to_child; # I can't believe I even have to say this... IO::Select, what are you thinking?
+
+            # read data from all ready filehandles
+            # handle may == $fh or $fh_error or *STDIN
+            # $fh_error may be undef coming out of the open3() call
+            my $handle_name = $handle == $fh ? "child's STDOUT" : $fh_error && $handle == $fh_error ? "child's STDERR" : $handle == *STDIN{IO} ? "installer STDIN" : 'unknown';
+            # warn "$handle_name is readable";
+
             my $bytes_read = sysread($handle, $buf, 1024);
-            if ($bytes_read == -1) {
-               # $output .= "\n[$handle_name closed]\n"; # XXX debug
-               $sel->remove($handle);
+
+            if ( ! defined $bytes_read ) {
+               next if $handle_name eq 'installer STDIN';
+               # warn "[$handle_name read error]\n";
+               last select_loop if $handle_name eq "child's STDOUT";  # when we can't read the child's output any more, the child has gone away
+               next;
+            } if ($bytes_read == -1) {
+               # warn "[$handle_name closed]\n"; # debug
+               last select_loop if $handle_name eq "child's STDOUT";  # when we can't read the child's output any more, the child has gone away
+               # $sel->remove($handle);
+               next;
+            } elsif ($bytes_read == 0) {
+               # warn "[$handle_name read error]\n";
+               last select_loop if $handle_name eq "child's STDOUT";  # when we can't read the child's output any more, the child has gone away
                next;
             }
-            if ($bytes_read == 0) {
-               # $output .= "\n[$handle_name read error]\n"; # XXX
-               $sel->remove($handle);
-               next;
-            }
+
+            # process the read data; if it was read from STDIN, send it to the child; if we're in nocurses mode and we read from the child processes
+            # stdin or stdout, send it to our STDOUT straight away. 
             if( $handle eq 'installer STDIN') {   # XXX instead of doing this if $stdin is set (and that arg passed), this does it all of the time
                 $to_child->print($buf);
                 $to_child->flush;
+            } elsif( $nocurses ) {
+                print($buf);
+                STDOUT->flush;
             } else {
                 $output .= $buf;
             }
         }
 
-#        last if @error_fhs;  # when the client starts closing stuff, it's done
-
-        update( tail( $msg . "\n$cmd:\n$output" ) );
+        update( tail( $msg . "\n$cmd:\n$output" ) ) if ! $nocurses;
     }
+
+    STDIN->blocking(1);
 
     # my $exit = close($output);
 
@@ -728,6 +757,13 @@ do {
     }
     main_win();  update();    # redraw
     update( qq{Creating directory '$install_dir'.\n} );
+
+
+        endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
+        print "\n" x 100;
+    run( "mkdir -p '$install_dir'", noprompt => 1, nocurses => 1, stdin => 1, ); # XXX testing
+
+
     run( "mkdir -p '$install_dir'", noprompt => 1 );
     chdir $install_dir;
     $ENV{PERL5LIB} .= ":$install_dir/WebGUI/lib:$install_dir/extlib/lib/perl5";
