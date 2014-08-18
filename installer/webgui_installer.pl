@@ -493,7 +493,7 @@ sub run {
 
     $to_child->print($input) if $input; # XXX to be safe, this would have to be done in an event loop or fork
 
-    my $exit = '';
+    my $exit;
 
     my $output = '';
 
@@ -578,11 +578,10 @@ sub run {
 
     STDIN->blocking(1);
 
-    # my $exit = close($output);
-
     # close $to_child or $exit = $! ? "Error closing pipe: $!" : "Exit status $? from pipe";
     waitpid $pid, 0;
-    $exit .= " Exit status @{[ $? >> 8 ]} from pipe" if $?;
+    $exit = $? if $?;
+    $exit >>= 8 if $exit and $exit >> 8;
 
     if( $exit and ! $nofatal ) {
         # generate a failure report email
@@ -749,23 +748,23 @@ do {
         Static and uploaded files for your site will be kept under in a 'domains' directory in there.
         Traditionally, WebGUI has lived inside of the '/data' directory, but this is not necessary.
     });
-    if( $verbosity >= 1 ) {
+    if( $verbosity >= 1 && ! -d $install_dir ) {
         update(qq{
             Create directory '$install_dir' to hold WebGUI?  [Y/N]
         });
         goto where_to_install unless scankey($mwh) =~ m/^y/i;
     }
     main_win();  update();    # redraw
-    update( qq{Creating directory '$install_dir'.\n} );
-
-
-        endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
-        print "\n" x 100;
-    run( "mkdir -p '$install_dir'", noprompt => 1, nocurses => 1, stdin => 1, ); # XXX testing
-
-
-    run( "mkdir -p '$install_dir'", noprompt => 1 );
+    if( -d $install_dir ) {
+        update( qq{Creating directory '$install_dir'.\n} );
+        run( "mkdir -p '$install_dir'", noprompt => 1 );
+    }
     chdir $install_dir;
+    if( -d "$install_dir/WebGUI" ) {
+        update(qq{The $install_dir/WebGUI directory already exists.\nTHIS SCRIPT DOES NOT UPGRADE OR ADD SITES, ONLY INSTALL.\nIt will erase all of your data.\nDo you wish to continue? [Y/N]});
+        exit unless scankey($mwh) =~ m/^y/i;
+        # rename 'WebGUI', "WebGUI.$$.bak";  # no, assume that an install is in progress, and the WebGUI directory contains the extracted files
+    }
     $ENV{PERL5LIB} .= ":$install_dir/WebGUI/lib:$install_dir/extlib/lib/perl5";
     $ENV{WEBGUI_ROOT} = "$install_dir/WebGUI";
     $ENV{WEBGUI_CONFIG} = "$install_dir/WebGUI/etc/$database_name.conf";
@@ -921,7 +920,7 @@ if( $run_as_user eq 'root' ) {
                 goto ask_what_username_to_use_for_the_new_user;
             }
             my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
-            run "useradd $run_as_user --password $new_user_password";
+            run "useradd $run_as_user --password $new_user_password --shell bash";  # on Debian, it defaults to dash if we don't specify bash
         }
 
     } else {
@@ -999,6 +998,7 @@ if( $mysqld_safe_path) {
             Write down the MySQL root password.
             You'll need it to manage MySQL and to complete this setup.
             Installing these packages:  mysql-client mysql-server
+            Press any reasonable key to continue.
         });
         scankey($mwh);
 
@@ -1016,7 +1016,7 @@ if( $mysqld_safe_path) {
         #     run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
         # }
 
-        # run( $sudo_command . 'apt-get update' );   # needed since we've just added to the sources
+        # run( $sudo_command . 'apt-get update', nofatal => 1, );   # needed since we've just added to the sources; don't barf if some of the apt locations are bad
 
         endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
         print "\n" x 100;
@@ -1085,8 +1085,19 @@ my $mysql_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z',
 
 do {
     # XXX hard-coded database user name to 'webgui' for now and user has no say in what the password is
-    update(qq{Creating database and database user.});
-    run( qq{mysql --password=$mysql_root_password --user=root -e "create database $database_name"} );
+    # my $database_already_exists = run qq{mysql --password=$mysql_root_password --user=root --batch --disable-column-names -e "select count(*) from mysql.db where Db='$database_name'"}, noprompt => 1; # can't find the table that has this.  mysql.db continues to remember the user/database even after the database is dropped.  http://dev.mysql.com/doc/refman/5.0/en/tables-table.html
+    my $database_already_exists_output = run qq{mysql --password=$mysql_root_password --user=root --batch --disable-column-names -e "show databases like '$database_name'"}, noprompt => 1;
+    chomp $database_already_exists_output;
+
+    if( $database_already_exists_output eq $database_name ) {
+        update(qq{Database '$database_name' already exists.\nTHIS INSTALLER WILL OVERWRITE YOUR DATABASE.\nHit Control-C if there is anything on an existing WebGUI install you want!\nOtherwise, press any reasonable key to continue.});
+        scankey($mwh);
+    } else {
+        update(qq{Creating database.});
+        run( qq{mysql --password=$mysql_root_password --user=root -e "create database $database_name"} );
+    }
+
+    update(qq{Creating database user.});
     run( qq{mysql --password=$mysql_root_password --user=root -e "grant all privileges on $database_name.* to webgui\@localhost identified by '$mysql_user_password'"} );
 };
 
@@ -1154,15 +1165,38 @@ progress(30);
 # WebGUI git checkout
 #
 
+# don't abuse github so much
+# do {
+#     update("Checking out a copy of WebGUI from GitHub...");
+#     # https:// fails for me on a fresh Debian for want of CAs; use http:// or git://
+#     my $url = 'http://github.com/plainblack/webgui.git';
+#     if( -f '/root/WebGUI/.git/config' ) {
+#         $url = '/root/WebGUI';
+#         update("Debug -- doing a local checkout of WebGUI from /root/WebGUI; if this isn't what you wanted, move that aside.");
+#     }
+#     run( "git clone $url WebGUI", nofatal => 1, ) or goto pick_install_directory;
+# };
+
 do {
-    update("Checking out a copy of WebGUI from GitHub...");
     # https:// fails for me on a fresh Debian for want of CAs; use http:// or git://
-    my $url = 'http://github.com/plainblack/webgui.git';
-    if( -f '/root/WebGUI/.git/config' ) {
-        $url = '/root/WebGUI';
-        update("Debug -- doing a local checkout of WebGUI from /root/WebGUI; if this isn't what you wanted, move that aside.");
+    chdir($install_dir);
+    if( -d "WebGUI" ) {
+        update("The directory $install_dir/WebGUI already exists.\nAssuming it is a good copy and continuing on.\nIf it is not a good copy, hit control-C now, delete it, and start again.\nOtherwise, press any reasonable key to continue.\n");
+        scankey($mwh);
+    } else {
+        my $url = 'http://github.com/AlliumCepa/webgui/archive/master.zip';
+        # XXX would be good to run zip -t on it to make sure it isn't truncated
+        if( -f '/tmp/webgui.zip' ) {
+            update("There is already a webgui.zip in /tmp; using that one.\nPress any reasonable key to continue.\n");
+            scankey($mwh);
+        } else {
+            update("Downloading a zip of WebGUI from GitHub...");
+            run("curl --insecure --location $url --output /tmp/webgui.zip", noprompt => 1,);
+        }
+        update("Extract WebGUI from the archive...");
+        run( "unzip -o /tmp/webgui.zip", noprompt => 1, );
+        rename("webgui-master", "WebGUI") or bail "Failed to rename webgui_master to WebGUI in $install_dir: $!";
     }
-    run( "git clone $url WebGUI", nofatal => 1, ) or goto pick_install_directory;
 };
 
 progress(40);
@@ -1176,7 +1210,7 @@ if( -f '/root/cpanm.test') {
     run "cp -a /root/cpanm.test WebGUI/sbin/cpanm", noprompt =>1;
 } else {
     update "Installing the cpanm utility to use to install Perl modules..." ;
-    run 'curl --insecure --location --silent http://cpanmin.us --output WebGUI/sbin/cpanm', noprompt => 1;
+    run 'curl --insecure --location http://cpanmin.us --output WebGUI/sbin/cpanm', noprompt => 1;
     run 'chmod ugo+x WebGUI/sbin/cpanm', noprompt => 1;
 }
 
@@ -1192,7 +1226,7 @@ if( -f '/root/wgd.test' ) {
 } else {
     update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades...", noprompt => 1, );
   try_wgd_again:
-    run( 'curl --insecure --location --silent http://haarg.org/wgd > WebGUI/sbin/wgd', nofatal => 1, ) or do {
+    run( 'curl --insecure --location http://haarg.org/wgd > WebGUI/sbin/wgd', nofatal => 1, noprompt => 1, ) or do {
         update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades... trying again to fetch..." );
         goto try_wgd_again;
     };
@@ -1211,13 +1245,13 @@ do {
         # if it fails, hopefully it wasn't important or else testEnvironment.pl can pick up the slack
         # XXX should send reports when modules fail to build
         # these don't have noprompt because RedHat users are cranky about perl modules not coming through their package system and I promised them that I would let them approve everything significant before it happens; need an ultra-low-verbosity verbosity setting
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, );  # this one likes to time out
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, );
+        run( "$sudo_command $perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out
+        run( "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, noprompt => 1, );
     } else {
         # backup plan is to build an extlib directory
         mkdir "$install_dir/extlib"; # XXX moved this up outside of 'WebGUI'
-        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, );  # this one likes to time out
-        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, );
+        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out XXX probably needs a non-interactive mode
+        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1, );
     }
     if( $linux eq 'redhat' ) {
         run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
@@ -1450,7 +1484,7 @@ do {
         are necessary even for brand new installs.
     } );
     # run "$perl WebGUI/sbin/wgd reset --upgrade", noprompt => 1,;  # XXX testing... want to watch the output of this... thought there were a lot more upgrades!
-    if( $run_as_user eq 'root' ) {
+    if( $run_as_user eq 'root' ) {    # XXX this assumes that the installer is being run as root, which may not be the case
         run "$perl WebGUI/sbin/wgd reset --upgrade";
     } else {
         # run upgrades as the user wG is going to run as so that log files, uploads, etc are all owned by that user
@@ -1497,17 +1531,19 @@ do {
         Debian users will need to add a startup script to start WebGUI if they want it to start with the system.
         $install_dir/webgui.sh shows how to manually launch WebGUI.
 
-        Documentation and forums are at http://webgui.org.
+        This installer wrote a config file for nginx and installed nginx, but did not add it to startup.
+
+        The spectre daemon (which handles background jobs) has not been configured.  Please consult the documentation.
     } );
     scankey($mwh);
 
-    open my $fh, '>', "$install_dir/webgui.sh" or bail("failed to write to $install_dir/webgui.sh: $!");
-    $fh->print(<<EOF);
+    open my $fh, '>', "$install_dir/webgui.sh" or bail "failed to open $install_dir/webgui.sh for write: $!";
+    $fh->print(<<EOF) or bail "failed to write to $install_dir/webgui.sh: $!";
 cd $install_dir/WebGUI
 export PERL5LIB="\$PERL5LIB:$install_dir/WebGUI/lib"
 plackup --port $webgui_port app.psgi &
 EOF
-    close $fh;
+    close $fh or bail "failed to close handle to $install_dir/webgui.sh: $!";
      
     progress(100);
 
@@ -1518,9 +1554,9 @@ EOF
 
     update( qq{
         Installation complete.
-        Go to http://$site_name and set up the new site.
+        Run $install_dir/webgui.sh, then go to http://$site_name:8081 and set up the new site.
         The admin user is "Admin" with password "123qwe".
-
+        Documentation and forums are at http://webgui.org.
         Please hit any reasonable key to exit the installer.
     } );
     scankey($mwh);
