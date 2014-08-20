@@ -948,6 +948,7 @@ if( $run_as_user eq 'root' ) {
     } else {
         # webgui user does exist; use it
         # XXX should ask and confirm that that's what the user wants
+        update("Found an existing 'webgui' user; using it.");
         $run_as_user = 'webgui';
     }
 }
