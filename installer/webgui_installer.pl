@@ -42,8 +42,21 @@ xdanger
 
 XXX todo:
 
+* configuring mysql with a blank password in Debian doesn't seem to work
+* in curses installer, sudo password is echoed in plaintext and remains on screen during installation.
+Error messages during apt-get stomp all over screen layout
+* Nice to have: a log of all the user selections and computed directories, database names, options, etc., for later reference or debugging.
+* It would be nice to have a set of command-line parameters to install WebGUI in an "unattended" mdoe mode*
+* select privilege_type from `information_schema`.`schema_privileges` where grantee like "'webgui'%" and table_schema='www_example_com';
+* This may have been mentioned before, but the installer doesn't like perlbrew. 
+I had to revert to system perl before the Curses UI worked.
+* But this doesn't [work]: # perl /opt/webgui/installer/webgui_installer.pl ... can't open /opt/webgui/installer//opt/webgui/installer/webgui_installer.pl: No such file or directory at     webgui/installer/webgui_instal
+ler.pl line 173, <STDIN> line 2.
+* Should permit empty MySQL password -- don't even ask the user for the password if no password is set. 
+
 XXXXX add instructions for starting spectre into the startup .sh we generate and check the hostname to make sure it resolves to the host (otherwise spectre won't work)
 
+XXX Silly that we run mkdir via shell.  We really need run()-like error handling but for closures we pass in.
 XXX plebgui support
 XXX don't overwrite an existing nginx.conf without permission
 XXX warn about impossiblely early date time; Curses wouldn't build
@@ -146,6 +159,8 @@ BEGIN {
     my $sudo = $root ? '' : `which sudo` || '';
     chomp $sudo;
 
+    $root or die "Non-root installations aren't currently supported.  Sorry.  Feel free to add the feature and share the code if you're able to!"; # XXX
+
     print "WebGUI8 installer bootstrap:  Installing stuff before we install stuff...\n\n";
     if( $linux eq 'debian' ) {
          my $cmd = "$sudo apt-get update";
@@ -172,7 +187,12 @@ BEGIN {
     # extract the uuencoded, tar-gzd attachments
 
     do {
-        open my $data, '<', "$Bin/$0" or die "can't open $Bin/$0: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
+        # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
+        # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
+        # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
+        my $fn = __FILE__;
+        $fn = "$Bin/$fn" if $fn !~ m{^/};
+        open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
         # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
         while( my $line = readline $data ) {
             chomp $line;
@@ -380,10 +400,17 @@ sub progress {
     $progress->draw($mwh);
 }
 
+sub enter {
+    my $text = shift;
+    $text .= "\n" if $text;
+    $text .= "Press Enter to continue." if $verbosity >= 0;
+    update( tail( $text ) );
+    scankey($mwh) if $verbosity >= 0;
+}
+
 sub bail {
     my $message = shift;
-    update( $message . "\nHit Enter.\n");
-    scankey($mwh );
+    enter($message);
     update( "May I please post this message to http://slowass.net/~scott/wginstallerbug.cgi?\nDoing so may help get bugs fixed and problems worked around in future versions." );
     my $feedback_dialogue = Curses::Widgets::ListBox->new({
          Y           => 2,
@@ -587,15 +614,17 @@ sub run {
         # generate a failure report email
         bail $msg . "\n$cmd:\n$output\nExit code $exit indicates failure." ;
     } elsif( $exit and $nofatal ) {
-        update( tail( $msg . "\n$cmd:\n$output\nExit code $exit indicates failure.\nHit Enter to continue." ) );
-        scankey($mwh);
+        if( $noprompt ) {
+            update( "$msg\n$cmd:\n$output\nExit code $exit indicates failure." );
+        } else {
+            enter( "$msg\n$cmd:\n$output\nExit code $exit indicates failure." );
+        }
         update( $msg );  # get rid of the extra stuff so that the next call to run() doesn't just keep adding stuff
         return;
     } else {
         $output ||= 'Success.';
         if( ! $noprompt and $verbosity >= 1 ) {
-            update( tail( $msg . "\n$cmd:\n$output\nHit Enter to continue." ) );
-            scankey($mwh);
+            enter( $msg . "\n$cmd:\n$output\nHit Enter to continue." );
         }
         update( $msg );  # get rid of the extra stuff so that the next call to run() doesn't just keep adding stuff
         # if( scankey($mwh) =~ m/h/ ) { open my $fh, '|-', '/usr/bin/hexdump', '-C'; $fh->print($output); }; # this didn't work
@@ -648,26 +677,21 @@ $SIG{USR1} = sub {
 #
 
 do {
-    update(qq{
+    enter(qq{
         Welcome to the WebGUI8 installer utility!
         Currently supported platforms are Debian GNU/Linux and CentOS GNU/Linux.
         You may press control-C at any time to exit.
         Examine commands before they're run to make sure that they're what you want to do!
-        Press any reasonable key to begin.
     });
-    scankey($mwh);
 
-    update(qq{
+    enter(qq{
         This script is provided without warranty, including warranty for merchantability, suitability for any purpose, and is not warrantied against special or incidental damages.  It may not work, and it may even break things.  Use at your own risk!  Always have good backups.  Consult the included source for full copyright and license.
-        Press any reasonable key to continue.
     });
-    scankey($mwh);
-    update(qq{
+
+    enter(qq{
         The full license (GNU GPL v2) is available from https://raw.github.com/gist/2973558/docs/license.txt
         By using this software, you agree to the terms and conditions of the license.
-        Press any reasonable key to continue.
     });
-    scankey($mwh);
 
     update(qq{
          Do you want to skip questions that have pretty good defaults?
@@ -755,11 +779,11 @@ do {
         goto where_to_install unless scankey($mwh) =~ m/^y/i;
     }
     main_win();  update();    # redraw
-    if( -d $install_dir ) {
+    if( ! -d $install_dir ) {
         update( qq{Creating directory '$install_dir'.\n} );
         run( "mkdir -p '$install_dir'", noprompt => 1 );
     }
-    chdir $install_dir;
+    chdir $install_dir or bail "Couldn't chdir to the install_dir $install_dir";
     if( -d "$install_dir/WebGUI" ) {
         update(qq{The $install_dir/WebGUI directory already exists.\nTHIS SCRIPT DOES NOT UPGRADE OR ADD SITES, ONLY INSTALL.\nIt will erase all of your data.\nDo you wish to continue? [Y/N]});
         exit unless scankey($mwh) =~ m/^y/i;
@@ -792,13 +816,11 @@ if( ! $root and `which sudo` ) {
     run( "$sudo_command ls /root", nofatal => 1, ) or goto sudo_command_again;
   no_sudo_command:
 } elsif( ! $root ) {
-    update( qq{
+    die "running as a user isn't currently working; sorry"; # XXXXXX
+    enter( qq{
         This script isn't running as root and I don't see sudo.
         You'll be prompted to run commands as root in another terminal window when and if needed.
-XXXXXX
-        Hit Enter to continue.
     } );
-    scankey($mwh);
 };
 
 progress(10);
@@ -937,13 +959,11 @@ if( $mysqld_safe_path) {
     my $extra_text= '';
     $extra_text .= "MySQL installed at $mysqld_path is version $mysqld_version.\n" if $mysqld_path and $mysqld_version;
     if( $verbosity >= 1 ) {
-        update(qq{
+        enter(qq{
             $extra_text
             Found mysqld_safe at $mysqld_safe_path.
             Using it.
-            Hit enter to continue. 
         });
-        scankey($mwh);
     } else {
         update(qq{
             $extra_text
@@ -954,6 +974,7 @@ if( $mysqld_safe_path) {
 
     #
     # start mysqld if it isn't already running
+    #
 
     do {
        my $ps = `ps ax`;
@@ -964,12 +985,26 @@ if( $mysqld_safe_path) {
        }
     };
 
-    goto already_have_possible_mysql_root_password if $mysql_root_password;
+    #
+    # test to see if the mysql root password is perhaps blank and if so, run with that
+    #
+
+    do {
+        update("Testing to see if perhaps there is no MySQL root password set.");
+        my $output = run( "mysql --user=root -e 'show databases'", noprompt => 1, nofatal => 1 ) || '';
+        $mysql_root_password = '' if $output !~ m/Access denied/;
+    };
+
+    #
+    # ask the user to tell us what the password is if we don't have it
+    #
+
+    goto already_have_possible_mysql_root_password if defined $mysql_root_password;
 
   mysql_password_again:
 
     update( qq{
-        Please enter your MySQL root password.
+        Please enter the root password you've (perhaps just now) set for MySQL.
         This will be used to create a new database to hold data for the WebGUI site, and to 
         create a user to associate with that database.
     } );
@@ -993,14 +1028,12 @@ if( $mysqld_safe_path) {
 
         # my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
 
-        update(qq{
+        enter(qq{
             Installing MySQL
             Write down the MySQL root password.
             You'll need it to manage MySQL and to complete this setup.
             Installing these packages:  mysql-client mysql-server
-            Press any reasonable key to continue.
         });
-        scankey($mwh);
 
         # per instructions at https://downloads.mariadb.org/mariadb/repositories/
         # run( "$sudo_command apt-get install -y python-software-properties" ); 
@@ -1024,8 +1057,10 @@ if( $mysqld_safe_path) {
 
         run("$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, );
 
-        print "Press enter to continue...\n";
-        readline(STDIN);
+        if( $verbosity >= 0 ) {
+           print "Press enter to continue...\n";
+           readline(STDIN);
+        }
 
         init_curses(); # $mwh = Curses->new; # re-init the screen (echo off, etc)
         main_win();  update();    # redraw
@@ -1063,10 +1098,9 @@ EOF
         run( "mysqladmin -u root password '$mysql_root_password'" );
 
     } else {
-        update(qq{
-            MySQL/MariaDB/Percona not found.  Please use another terminal window (or control-Z this one) to install one of them, and then hit enter to continue.
+        enter(qq{
+            MySQL/MariaDB/Percona not found.  Please use another terminal window (or control-Z this one) to install one of them.
         });
-        scankey($mwh);
         goto scan_for_mysqld;
     }
 
@@ -1090,15 +1124,17 @@ do {
     chomp $database_already_exists_output;
 
     if( $database_already_exists_output eq $database_name ) {
-        update(qq{Database '$database_name' already exists.\nTHIS INSTALLER WILL OVERWRITE YOUR DATABASE.\nHit Control-C if there is anything on an existing WebGUI install you want!\nOtherwise, press any reasonable key to continue.});
-        scankey($mwh);
+        enter(qq{Database '$database_name' already exists.\nIf the database load from create.sql step has already completed, you must later on in the install process opt to skip that step.\nOtherwise, trying to load it again will error out.\nHit Control-C if there is anything on an existing WebGUI install you want!\n});
+        # XXX if the database already exists, the user must skip the create.sql load step or else it will fail.
+        # XXX we could be more robust here and offer to drop the database and create it again.
     } else {
         update(qq{Creating database.});
         run( qq{mysql --password=$mysql_root_password --user=root -e "create database $database_name"} );
     }
 
     update(qq{Creating database user.});
-    run( qq{mysql --password=$mysql_root_password --user=root -e "grant all privileges on $database_name.* to webgui\@localhost identified by '$mysql_user_password'"} );
+    run( qq{mysql --password=$mysql_root_password --user=root -e "grant all privileges on $database_name.* to webgui\@localhost identified by '$mysql_user_password'"}, noprompt => 1, );
+    # don't let people say no to this; if the user is continuing an interrupted install, then we won't know what the password was randomly set to
 };
 
 progress(25);
@@ -1120,7 +1156,7 @@ do {
 
             # XXX this installs a ton of stuff, including X, cups, icon themes, etc.  what triggered that?  can we avoid it?
 
-            run( " $sudo_command yum install --assumeyes ImageMagick-perl.$cpu openssl.$cpu openssl-devel.$cpu expat-devel.$cpu git curl" );
+            run( " $sudo_command yum install --assumeyes libpng12-dev ImageMagick-perl.$cpu openssl.$cpu openssl-devel.$cpu expat-devel.$cpu git curl" ); # $cpu looks like eg 'x86_64'
             # http://wiki.nginx.org/Install:
             # "Due to differences between how CentOS, RHEL, and Scientific Linux populate the $releasever variable, it is necessary to manually 
             # replace $releasever with either "5" (for 5.x) or "6" (for 6.x), depending upon your OS version."
@@ -1153,8 +1189,7 @@ EOF
 
     } else {
 
-        update( "WebGUI needs the perlmagick libssl-dev libexpat1-dev git curl and build-essential packages but I'm not running as root or I'm on a strange system so I can't install them; please either install these or else run this script as root." ); # XXXX
-        scankey($mwh);
+        enter( "WebGUI needs the perlmagick libssl-dev libexpat1-dev git curl and build-essential packages but I'm not running as root or I'm on a strange system so I can't install them; please either install these or else run this script as root." ); # XXXX
 
     }
 };
@@ -1181,14 +1216,12 @@ do {
     # https:// fails for me on a fresh Debian for want of CAs; use http:// or git://
     chdir($install_dir);
     if( -d "WebGUI" ) {
-        update("The directory $install_dir/WebGUI already exists.\nAssuming it is a good copy and continuing on.\nIf it is not a good copy, hit control-C now, delete it, and start again.\nOtherwise, press any reasonable key to continue.\n");
-        scankey($mwh);
+        enter("The directory $install_dir/WebGUI already exists.\nAssuming it is a good copy and continuing on.\nIf it is not a good copy, hit control-C now, delete it, and start again.\n");
     } else {
         my $url = 'http://github.com/AlliumCepa/webgui/archive/master.zip';
         # XXX would be good to run zip -t on it to make sure it isn't truncated
         if( -f '/tmp/webgui.zip' ) {
-            update("There is already a webgui.zip in /tmp; using that one.\nPress any reasonable key to continue.\n");
-            scankey($mwh);
+            enter("There is already a webgui.zip in /tmp; using that one.\n");
         } else {
             update("Downloading a zip of WebGUI from GitHub...");
             run("curl --insecure --location $url --output /tmp/webgui.zip", noprompt => 1,);
@@ -1325,8 +1358,10 @@ do {
     update( qq{
         Loading the initial WebGUI database.
         This contains configuration, table structure for all of the tables, definitions for the default assets, and other stuff.
+        Skip this step if you've already done it or else it will error out.
     } );
-    run( qq{ mysql --password=$mysql_user_password --user=webgui $database_name < WebGUI/share/create.sql }, noprompt => 1, );
+    # the user currently needs to be able to skip this step if it was already done, as the create.sql doesn't contain drop table statements
+    run( qq{ mysql --password=$mysql_user_password --user=webgui $database_name < WebGUI/share/create.sql }, );
 };
 
 #
@@ -1368,16 +1403,21 @@ progress(70);
 do {
     # create webroot
     update qq{Creating site directory structure under $install_dir/domains/$site_name... };
-    mkdir "$install_dir/domains" or bail "Couldn't create $install_dir/domains: $!";
-    mkdir "$install_dir/domains/$site_name" or bail "Couldn't create $install_dir/domains/$site_name: $!";
-    # mkdir "$install_dir/domains/$site_name/logs" or bail "Couldn't create $install_dir/domains/$site_name/logs: $!"; # not under /data/wre but instead in WebGUI and we let the user pick a dir earlier on
-    mkdir "$install_dir/domains/$site_name/public" or bail "Couldn't create $install_dir/domains/$site_name/public: $!";
-    mkdir "$install_dir/domains/$site_name/public/uploads" or bail "Couldn't create $install_dir/domains/$site_name/public/uploads: $!";
-    update qq{Populating $install_dir/domains/$site_name/public/uploads with bundled static HTML, JS, and CSS... };
-    run "$perl WebGUI/sbin/wgd reset --uploads", noprompt => 1;
-    # run "cp -a WebGUI/www/extras $install_dir/domains/public/", noprompt => 1;     # matches $config->set( extrasPath      => "$install_dir/domains/$site_name/public/extras", ), above # XXX nginx points into WebGUI/www/extras ... 
-    run "chown $run_as_user $install_dir", noprompt => 1;
-    run "chown -R $run_as_user $install_dir/domains/$site_name/public/uploads", noprompt => 1;
+    if( -d "$install_dir/domains"  ) {
+        update(qq{The $install_dir/domain directory already exists.\nDo you wish to continue? [Y/N]});
+        exit unless scankey($mwh) =~ m/^y/i;
+    } else {
+        mkdir "$install_dir/domains" or bail "Couldn't create $install_dir/domains: $!";
+        mkdir "$install_dir/domains/$site_name" or bail "Couldn't create $install_dir/domains/$site_name: $!";
+        # mkdir "$install_dir/domains/$site_name/logs" or bail "Couldn't create $install_dir/domains/$site_name/logs: $!"; # not under /data/wre but instead in WebGUI and we let the user pick a dir earlier on
+        mkdir "$install_dir/domains/$site_name/public" or bail "Couldn't create $install_dir/domains/$site_name/public: $!";
+        mkdir "$install_dir/domains/$site_name/public/uploads" or bail "Couldn't create $install_dir/domains/$site_name/public/uploads: $!";
+        update qq{Populating $install_dir/domains/$site_name/public/uploads with bundled static HTML, JS, and CSS... };
+        run "$perl WebGUI/sbin/wgd reset --uploads", noprompt => 1;
+        # run "cp -a WebGUI/www/extras $install_dir/domains/public/", noprompt => 1;     # matches $config->set( extrasPath      => "$install_dir/domains/$site_name/public/extras", ), above # XXX nginx points into WebGUI/www/extras ... 
+        run "chown $run_as_user $install_dir", noprompt => 1;
+        run "chown -R $run_as_user $install_dir/domains/$site_name/public/uploads", noprompt => 1;
+    }
 };
 
 progress(75);
@@ -1392,8 +1432,7 @@ do {
 
     update "Setting up nginx main config";
     if( -f "/etc/nginx/conf.d/webgui8.conf" ) {
-        update "There's already an /etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\nHit Enter to continue.";
-        scankey($mwh);
+        enter "There's already an /etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\n";
     } else {
         # nginx.conf does an include [% webgui_root %]/etc/*.nginx
         eval { 
@@ -1461,14 +1500,14 @@ progress(80);
 # miserable hack
 #
 
-do {
-    # fix version number to match create.sql
-    update( qq{
-        Working around a release problem where upgrades refuse to run because of a version mismatch.
-    } );
-    run( $perl . ' -p -i -e "s/8\.0\.1/8\.0\.0/g" WebGUI/lib/WebGUI.pm', noprompt => 1, );
-};
-
+# 69d207d set the version back to 8.0.0 so we don't need to do this
+# do {
+#     # fix version number to match create.sql
+#     update( qq{
+#         Working around a release problem where upgrades refuse to run because of a version mismatch.
+#     } );
+#     run( $perl . ' -p -i -e "s/8\.0\.1/8\.0\.0/g" WebGUI/lib/WebGUI.pm', noprompt => 1, );
+# };
 
 
 #
@@ -1524,8 +1563,10 @@ do {
 do {
     #run webgui. -- For faster server install "cpanm -L extlib Starman" and add " -s Starman --workers 10 --disable-keepalive" to plackup command
 
+    $verbosity = 0 if $verbosity < 0; # give people a chance to read these screens even if they had minimum verbosity set
+
     # XXX should dynamically include a list of things the user needs to manually do
-    update( qq{
+    enter( qq{
         Installation is wrapping up.
 
         Debian users will need to add a startup script to start WebGUI if they want it to start with the system.
@@ -1535,7 +1576,6 @@ do {
 
         The spectre daemon (which handles background jobs) has not been configured.  Please consult the documentation.
     } );
-    scankey($mwh);
 
     open my $fh, '>', "$install_dir/webgui.sh" or bail "failed to open $install_dir/webgui.sh for write: $!";
     $fh->print(<<EOF) or bail "failed to write to $install_dir/webgui.sh: $!";
@@ -1552,14 +1592,18 @@ EOF
     #    export PERL5LIB="/$install_dir/WebGUI/lib"
     #    plackup --port $webgui_port app.psgi
 
-    update( qq{
+    my $text = qq{
         Installation complete.
         Run $install_dir/webgui.sh, then go to http://$site_name:8081 and set up the new site.
         The admin user is "Admin" with password "123qwe".
         Documentation and forums are at http://webgui.org.
         Please hit any reasonable key to exit the installer.
-    } );
-    scankey($mwh);
+    };
+    enter( $text );
+
+    endwin();
+
+    print "\n" . $text . "\n";
 
 };
 
