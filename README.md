@@ -17,7 +17,26 @@ WebGUI is a mature, feature rich Content Management System.  It's written in Per
 
 ## Installation
 
+On Debian and CentOS (in development), the interactive installer script is recommended:
+
+    cd installer
+    perl webgui_installer.pl
+
+Then answer the questions about site URL, installation directory, what MySQL password to use, and so on.
+
+## Manual Installation
+
+For OSX, FreeBSD, and other systems, or for those who like to see exactly what is happening, use the manual install process.
+
+Many perl modulues require system librarys, such as libexpat1-dev on Debian; you have to figure out which system packages you need to install for your system.
+If you do that, please tell us what they are so we can document that for other people on the same system.
+
+For example, on Debian, the following system packages are needed:
+perlmagick libssl-dev libexpat1-dev git curl nginx build-essential  libpng-dev mysql-server mysql-client
+
 This assumes that your site is "www.example.com".  If it's something else, change the commands to match.
+
+Generic source install instructions:
 
 * Load share/create.sql into your MySQL/MariaDB/Percona
 * Run testEnvironment.pl to install all new requirements
@@ -29,6 +48,12 @@ This assumes that your site is "www.example.com".  If it's something else, chang
 * Set WEBGUI_CONFIG to point at your new config file.  For example: ```export WEBGUI_CONFIG=etc/www.whatever.com.conf``` .
 * Run upgrades (yes, even for brand new install):  wgd reset --upgrade
 * Copy the "extras" directory from whereever you unpacked it to whereever you pointed extrasPath to in the config file.  For example, if you unpacked the source in /data/WebGUI and the extrasPath to /data/domains/www.example.com/public/, you'd run: rsync -r -a /data/WebGUI/www/extras /data/domains/www.example.com/public/
+
+More detailed (but less well maintained) instructions are in [docs/install.txt](docs/install.txt).
+
+[docs/wre_install.txt](docs/wre_install.txt) (also unmaintained) has instructions for using the "WebGUI Runtime Environment" to run wG8.  This is a nearly complete 32-bit binary distribution
+of everything you need to run WebGUI 7 on Linux.  It can be updated with additional Perl modules required to run 8, but the setup/management scripts are likely non-functional.
+Patches are welcome from interested parties.
 
 ## To start WebGUI
 
