@@ -942,7 +942,7 @@ if( $run_as_user eq 'root' ) {
                 goto ask_what_username_to_use_for_the_new_user;
             }
             my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
-            run "useradd $run_as_user --password $new_user_password --shell bash";  # on Debian, it defaults to dash if we don't specify bash
+            run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
         }
 
     } else {
