@@ -55,6 +55,8 @@ More detailed (but less well maintained) instructions are in [docs/install.txt](
 of everything you need to run WebGUI 7 on Linux.  It can be updated with additional Perl modules required to run 8, but the setup/management scripts are likely non-functional.
 Patches are welcome from interested parties.
 
+The old manual source instructions for 7.x are at [http://www.webgui.org/wiki/source-install].
+
 ## To start WebGUI
 
 To test or develop:
