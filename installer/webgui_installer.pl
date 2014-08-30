@@ -121,16 +121,6 @@ my $root;
 
 BEGIN { $root = $> == 0; };
 
-# which linux
-
-my $linux;
-
-BEGIN {
-    $linux = 'unknown';
-    $linux = 'debian' if -f '/etc/debian_version';
-    $linux = 'redhat' if -f '/etc/redhat-release';
-};
-
 use Cwd;
 
 # my $starting_dir = getcwd;
@@ -138,10 +128,16 @@ use Cwd;
 BEGIN { chdir '/tmp' or die $!; };
 my $starting_dir = '/tmp/';
 
-my $sixtyfour;
-my $thirtytwo;
+# OS
+
+my $os;
+
+# cpu architecture and flags for different cpu architectures
 
 my $cpu;
+
+my $sixtyfour;
+my $thirtytwo;
 
 BEGIN {
 
@@ -149,12 +145,29 @@ BEGIN {
 
     $perl = $Config{perlpath};
 
-    $sixtyfour = $Config{archname} =~ m/x86_64/ ? '64' : ''; # XXXXXXX use these everywhere apt-get gets run
-    $thirtytwo = $Config{archname} =~ m/i686/ ? '32' : '';
+    # OS
 
-    $cpu = $Config{archname};
-    $cpu =~ s{-.*}{};
-    $cpu = 'i686' if $cpu eq 'i386'; # at least for RedHat
+    $ os = $^O;
+
+    if( ! grep $os, qw/darwin linux/ ) {
+        die "Sorry, your operating system is not yet supported by this installer.\nIt has no idea which packages need to be installed for target ``$os''.\nPlease look for the link to the source install method from the README.md.\n";
+    }
+
+    $os = 'debian' if $os eq 'linux' and -f '/etc/debian_version';
+    $os = 'redhat' if $os eq 'linux' and -f '/etc/redhat-release';
+
+    # only applicable to Linux
+
+    if( $os eq 'linux' ) {
+        $sixtyfour = $Config{archname} =~ m/x86_64/ ? '64' : ''; # XXXXXXX use these everywhere apt-get gets run
+        $thirtytwo = $Config{archname} =~ m/i686/ ? '32' : '';
+    
+        $cpu = $Config{archname};
+        $cpu =~ s{-.*}{};
+        $cpu = 'i686' if $cpu eq 'i386'; # at least for RedHat
+    }
+    
+    # are we root?
 
     my $sudo = $root ? '' : `which sudo` || '';
     chomp $sudo;
@@ -162,7 +175,7 @@ BEGIN {
     $root or die "Non-root installations aren't currently supported.  Sorry.  Feel free to add the feature and share the code if you're able to!"; # XXX
 
     print "WebGUI8 installer bootstrap:  Installing stuff before we install stuff...\n\n";
-    if( $linux eq 'debian' ) {
+    if( $os eq 'debian' ) {
          my $cmd = "$sudo apt-get update";
          print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
          goto skip_update if readline(STDIN) =~ m/s/;
@@ -173,7 +186,7 @@ BEGIN {
          goto skip_apt_get if readline(STDIN) =~ m/s/;
          system $cmd;
        skip_apt_get:
-    } elsif( $linux eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
         # no counterpart to libcurses-perl or libcurses-widgets-perl so we have to fallback on building from the bundled tarball
         my $cmd = "$sudo yum install --assumeyes gcc make automake kernel-devel man ncurses-devel.$cpu perl-devel.$cpu sudo";
         print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
@@ -235,7 +248,7 @@ BEGIN {
             $file =~ s{\.tar\.gz$}{};
             $file =~ s{\.modified}{};
             chdir $file or die $!;
-            die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $linux eq 'redhat' and ! $root;
+            die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
             # XXX would be better to test -w on the perl lib dir; might be a private perl install
             if( ! $root ) {
                 system $perl, 'Makefile.PL', 'PREFIX=/tmp';
@@ -1025,7 +1038,7 @@ if( $mysqld_safe_path) {
 
     # install and set up MySQL
 
-    if( ( $root or $sudo_command ) and $linux eq 'debian' ) {
+    if( ( $root or $sudo_command ) and $os eq 'debian' ) {
 
         # my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
 
@@ -1071,7 +1084,7 @@ if( $mysqld_safe_path) {
 
         goto scan_for_mysqld;
 
-    } elsif( ( $root or $sudo_command ) and $linux eq 'redhat' ) {
+    } elsif( ( $root or $sudo_command ) and $os eq 'redhat' ) {
 
         run( "$sudo_command yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
 
@@ -1145,15 +1158,15 @@ progress(25);
 #
 
 do {
-    if( $root or $sudo_command and ( $linux eq 'debian' or $linux eq 'redhat' ) ) {
+    if( $root or $sudo_command and ( $os eq 'debian' or $os eq 'redhat' ) ) {
 
-        if( $linux eq 'debian' ) {
+        if( $os eq 'debian' ) {
 
             # run( $sudo_command . 'apt-get update', noprompt => 1, );
  # XXXX yes, but are we installing perlmagick for the *correct* perl install?  not if they built their own perl
             run( "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx" );
 
-        } elsif( $linux eq 'redhat' ) {
+        } elsif( $os eq 'redhat' ) {
 
             # XXX this installs a ton of stuff, including X, cups, icon themes, etc.  what triggered that?  can we avoid it?
 
@@ -1287,7 +1300,7 @@ do {
         run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out XXX probably needs a non-interactive mode
         run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1, );
     }
-    if( $linux eq 'redhat' ) {
+    if( $os eq 'redhat' ) {
         run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
     }
 };
@@ -1468,9 +1481,9 @@ do {
     update "Having nginx test nginx.conf and the conf files it pulls in";
     run "nginx -t", noprompt => 1;
 
-    if( $linux eq 'debian' ) {
+    if( $os eq 'debian' ) {
         # XXXX
-    } elsif( $linux eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
         run "$sudo_command /sbin/chkconfig nginx on", noprompt => 1 ;
         run "$sudo_command /sbin/service nginx start", noprompt => 1 ;
     }
@@ -1482,12 +1495,12 @@ do {
 #
 
 do {
-    if( $linux eq 'debian' ) {
+    if( $os eq 'debian' ) {
 #        eval { 
 #            template(services_debian(), "/etc/rc.d/init.d/webgui8XXXX", { } ) # XXXXXXXX doesn't exist yet and certainly isn't tested
 #        } or bail "Failed to template startup file into /etc/rc.d/init.d/webgui8XXXX: $@";
 #        run "chmod ugo+x /etc/rc.d/init.d/webgui8", noprompt => 1; # XXXX
-    } elsif( $linux eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
         eval { 
             template(services_redhat(), "/etc/rc.d/init.d/webgui8", { } ) 
         } or bail "Failed to template startup file into /etc/rc.d/init.d/webgui8: $@";
@@ -1548,9 +1561,9 @@ do {
     run "touch $log_files/webgui.log", noprompt => 1;
     run "chown $run_as_user $log_files/*.log", noprompt => 1; # testing... again after touching the file
 
-    if( $linux eq 'debian' ) {
+    if( $os eq 'debian' ) {
         # XXX
-    } elsif( $linux eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
         update "Attempting to start the WebGUI server process...\n";
         run "$sudo_command /sbin/chkconfig webgui8 on", noprompt => 1 ;
         run "$sudo_command /sbin/service webgui8 start", noprompt => 1, background => 1 ; # XXX working around this process going zombie
