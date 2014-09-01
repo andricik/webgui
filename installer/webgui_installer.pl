@@ -42,6 +42,7 @@ xdanger
 
 XXX todo:
 
+* we need something like run() but that takes a closure instead of shell commands.
 * configuring mysql with a blank password in Debian doesn't seem to work
 * in curses installer, sudo password is echoed in plaintext and remains on screen during installation.
 Error messages during apt-get stomp all over screen layout
@@ -139,6 +140,10 @@ my $cpu;
 my $sixtyfour;
 my $thirtytwo;
 
+# where config files wind up
+
+my $nginx_etc;
+
 BEGIN {
 
     # early bootstrapping
@@ -168,6 +173,7 @@ BEGIN {
     }
     
     # are we root?
+    # XXX sudo not currently working
 
     my $sudo = $root ? '' : `which sudo` || '';
     chomp $sudo;
@@ -175,26 +181,54 @@ BEGIN {
     $root or die "Non-root installations aren't currently supported.  Sorry.  Feel free to add the feature and share the code if you're able to!"; # XXX
 
     print "WebGUI8 installer bootstrap:  Installing stuff before we install stuff...\n\n";
+    my $cmd;
     if( $os eq 'debian' ) {
-         my $cmd = "$sudo apt-get update";
+
+         $nginx_etc = 'etc';
+
+         $cmd = "$sudo apt-get update";
          print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
          goto skip_update if readline(STDIN) =~ m/s/;
          system $cmd;
        skip_update:
          $cmd = "$sudo apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl";
-         print "\n\nrunning: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
-         goto skip_apt_get if readline(STDIN) =~ m/s/;
-         system $cmd;
-       skip_apt_get:
+
     } elsif( $os eq 'redhat' ) {
-        # no counterpart to libcurses-perl or libcurses-widgets-perl so we have to fallback on building from the bundled tarball
-        my $cmd = "$sudo yum install --assumeyes gcc make automake kernel-devel man ncurses-devel.$cpu perl-devel.$cpu sudo";
-        print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
-        goto skip_install if readline(STDIN) =~ m/s/;
-        system $cmd;
-       skip_install:
+
+        $nginx_etc = 'etc';
+
+        # no counterpart to libcurses-perl or libcurses-widgets-perl so we have to fallback on building from the bundled tarball XXX really?
+        $cmd = "$sudo yum install --assumeyes gcc make automake kernel-devel man ncurses-devel.$cpu perl-devel.$cpu sudo";
+
+    } elsif( $os eq 'darwin' ) {
+
+        $nginx_etc = 'usr/local/etc';
+
+        # they have to have gcc installed already care of Xcode; we can't really do that for them since it's a GUI install process 
+        # ncurses seems to be there already at least once Command Line Tools and everything else is installed; not sure where it comes from
+        # make and autoconf seem to be there as well; perl too; sudo too; huh, nothing to install at this point!
+        # this is too early in the process for bail() so we use die() instead.
+
+        system 'which gcc' and die "Please install Xcode (http://developer.apple.com), Command Line Tools (method changes constantly; good luck), and brew from http://brew.sh first and then re-run this installer.\nhttp://superuser.com/questions/390191/where-can-i-find-a-list-of-all-formulas-available-for-homebrew might help you track down the Command Line Tools.\n";
+        system 'which brew' and die "Please install Command Line Tools (method changes constantly; good luck) and brew from http://brew.sh first and then re-run this installer.\n";
+
+        -f '/usr/local/bin/brew' or die "'brew' isn't where we expect it to be; please report this.";
+
+        (undef, undef, undef, undef, my $owner_userid) = stat '/usr/local/bin/brew';
+        if( $owner_userid != 0) {
+            print "Changing brew to be owned by root so that it won't complain when it is run as root.\nbrew says that this is untested and unsupported.\n";
+            $cmd = "chown root /usr/local/bin/brew";
+        }
+
     } else {
+
         die "I only know how to do Debian and RedHat right now.  Please refer to the source install instructions.\n";
+
+    }
+
+    if( $cmd ) {
+        print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
+        system $cmd unless readline(STDIN) =~ m/s/;
     }
 
     # extract the uuencoded, tar-gzd attachments
@@ -226,7 +260,7 @@ BEGIN {
         }
     };
 
-    # attempt to load Curses and Curses::Widget or go the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
+    # attempt to load Curses and Curses::Widget or go with the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
 
     eval { require Curses; require Curses::Widgets; } or do {
         `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
@@ -445,6 +479,7 @@ sub bail {
         use Socket; 
         socket my $s, 2, 1, 6 or die $!;
         connect $s, scalar sockaddr_in(80, scalar inet_aton("slowass.net")) or do {print "failed to send feedback: $!"; exit; };
+        $message .= "\n\nOS: $os\nperl: $perl\n\nroot: $root\n\ncpu: $cpu\n\n";
         (my $encoded_message = $message) =~ s{([^a-zA-Z0-9_-])}{ '%'.sprintf("%02x", ord($1)) }ge;
         my $postdata = 'message=' . $encoded_message;
         syswrite $s, "POST /~scott/wginstallerbug.cgi HTTP/1.0\r\nHost: slowass.net\r\nContent-type: application/x-www-form-urlencoded\r\nContent-Length: " . length($postdata) . "\r\n\r\n" . $postdata;
@@ -633,7 +668,7 @@ sub run {
             enter( "$msg\n$cmd:\n$output\nExit code $exit indicates failure." );
         }
         update( $msg );  # get rid of the extra stuff so that the next call to run() doesn't just keep adding stuff
-        return;
+        return $output;
     } else {
         $output ||= 'Success.';
         if( ! $noprompt and $verbosity >= 1 ) {
@@ -672,6 +707,16 @@ sub text {
     return $text->getField('VALUE');
 }
 
+sub grep_file {
+    my $expression = shift;
+    my $fn = shift;
+    -f $fn or return;
+    open my $fh, '<', $fn or bail "Trying to search for a string in ``$fn'', I failed to open it: ``$!''.";
+    read $fh, my $buf, -s $fh;
+    close $fh;
+    return $buf =~ $expression;
+}
+
 #
 #
 #
@@ -684,6 +729,47 @@ $SIG{CONT} = sub {
 $SIG{USR1} = sub {
     use Carp; Carp::confess $_[0];
 };
+
+#
+# Curses patches
+#
+
+no warnings 'redefine';
+
+# patch Curses::Widgets::ListBox so that we can tell what's selected on OSX
+
+*Curses::Widgets::ListBox::_cursor = sub {
+  my $self = shift;
+  my $dwh = shift;
+  my $conf = $self->{CONF};
+  my ($pos, $top, $cols, $sel) = @$conf{qw(CURSORPOS TOPELEMENT COLUMNS VALUE)};
+  my $fg;
+
+  # Determine the foreground colour
+  if (defined $sel && exists $$conf{SELECTEDCOL} && grep /^$pos$/, (ref($sel) eq 'ARRAY' ? @$sel : $sel)) {
+    $fg = $$conf{SELECTEDCOL};
+  } else {
+    $fg = $$conf{FOREGROUND};
+  }
+
+  # Display the cursor
+  # was: $dwh->chgat($pos - $top, 0, $cols, A_STANDOUT, select_colour( $fg, $$conf{BACKGROUND}), 0);
+  $dwh->chgat($pos - $top, 0, $cols, A_BLINK, select_colour( $fg, $$conf{BACKGROUND}), 0);
+
+  # Restore the default settings
+  $self->_restore($dwh);
+};
+
+# patch Curses::Widgets::TextField so that backspace works
+
+my $input_key = *Curses::Widgets::TextField::input_key{CODE};
+*Curses::Widgets::TextField::input_key = sub {
+    my $self = shift;
+    my $key = shift;
+    $key = KEY_BACKSPACE if ord($key) == 127;  # handle "delete" as "backspace"
+    $input_key->($self, $key);
+};
+
 
 #
 #
@@ -708,22 +794,27 @@ do {
 
     update(qq{
          Do you want to skip questions that have pretty good defaults?
-         You'll still be given a chance to inspect any potentially dangerous commands before they're run.
+         "Fewer Questions" and "More Questions" give you a chance to inspect any potentially dangerous commands before they're run.
+         Danger:  "Few Questions as Possible" should only be used on a dedicated machine/VM.  It will clobber configs and data without asking!
     });
-    my $verbosiy_dialogue = Curses::Widgets::ListBox->new({
+    my $verbosity_dialogue;
+    $verbosity_dialogue  = Curses::Widgets::ListBox->new({
          Y           => 2,
          X           => 38,
          COLUMNS     => 25,
          LISTITEMS   => ['Fewer Questions', 'More Questions', 'Few Questions as Possible'],
          VALUE       => 0,
-         SELECTEDCOL => 'white',
+         SELECTEDCOL => 'white', # this keeps it from apply bold to the currently selected one (the currently selected one is only the default one of the 1st one)
+         FOREGROUND  => 'white',
+         BACKGROUND  => 'black',
          CAPTION     => 'Detail Level',
          CAPTIONCOL  => 'white',
          FOCUSSWITCH => "\t\n",
+         # INPUTFUNC   => sub { Curses::Widgets::ListBox::scankey(@_); $verbosity_dialogue->draw($mwh); },
     });
-    $verbosiy_dialogue->draw($mwh);
-    $verbosiy_dialogue->execute($mwh);
-    $verbosity = $verbosiy_dialogue->getField('CURSORPOS');
+    $verbosity_dialogue->draw($mwh);
+    $verbosity_dialogue->execute($mwh);
+    $verbosity = $verbosity_dialogue->getField('CURSORPOS');
     $verbosity = -1 if $verbosity == 2;
     main_win();  # erase the dialogue
     update();    # redraw after erasing the text dialogue
@@ -734,18 +825,6 @@ do {
 # $SIG{__DIE__} = sub { endwin(); print "\n" x 10; Carp::confess($_[0]); };
 $SIG{__DIE__} = sub { bail("Fatal error: $_[0]" . Carp::longmess() ); };
 
-
-#
-#
-#
-
-my $input_key = *Curses::Widgets::TextField::input_key{CODE};
-*Curses::Widgets::TextField::input_key = sub {
-    my $self = shift;
-    my $key = shift;
-    $key = KEY_BACKSPACE if ord($key) == 127;  # handle "delete" as "backspace"
-    $input_key->($self, $key);
-};
 
 #
 # site name
@@ -881,42 +960,12 @@ if( $verbosity >= 1 ) {
 
 }
 
-progress(15);
-
 #
-# mysqld
+# user to run wG as
 #
 
-scan_for_mysqld:
+# (this was in the middle of the mysql detection/setup; moved it out; did I break things doing that? XXXXXXXX)
 
-my $mysqld_safe_path = `which mysqld_safe 2>/dev/null`; chomp $mysqld_safe_path if $mysqld_safe_path;
-
-my $mysqld_path = `which mysqld 2>/dev/null`; chomp $mysqld_path if $mysqld_path;
-
-if( $mysqld_safe_path and ! $mysqld_path ) {
-    # mysqld is probably hiding in a libexec somewhere and mysqld_safe won't relay a request for --version
-    open my $fh, '<', $mysqld_safe_path or bail "opening ``$mysqld_safe_path'', the mysqld_safe script, for read: $!";
-    while( my $line = readline $fh ) {
-        # looking for a line like this: ledir='/usr/local/libexec'
-        (my $ledir) = $line =~ m/^\s*ledir='(.*)'/ or next;
-        next if $ledir =~ m/\$/;  # not any of the ones with shell variables in them; those run override args to mysqld_safe as given
-        $mysqld_path = $ledir . '/mysqld';
-        $mysqld_path = undef unless -x $mysqld_path;
-    }
-}
-
-my $mysqld_version;
-if( $mysqld_path ) {
-    my $extra = '';
-    # if ! -x $mysqld_path # XXX
-    # update( $comment->getField('VALUE') . " Running command: $mysqld_path --version", noprompt => 1, );
-    # my $sqld_version = `$mysqld_path --version`;
-    $mysqld_version = run "$mysqld_path --version", noprompt => 1;
-    # /usr/local/libexec/mysqld  Ver 5.1.46 for pc-linux-gnu on i686 (Source distribution)
-    ($mysqld_version) = $mysqld_version =~ m/Ver\s+(\d+\.\d+)\./ if $mysqld_version;
-}
-
-my $mysql_root_password;
 my $run_as_user = getpwuid($>);
 my $current_user = $run_as_user;
 
@@ -925,6 +974,9 @@ if( $run_as_user eq 'root' ) {
     my ($name, $passwd, $uid, $gid,  $quota, $comment, $gcos, $dir, $shell, $expire) = getpwnam('webgui');
 
     if( ! $name ) {
+
+        my $new_user_password;
+
       ask_about_making_a_new_user:
         update "Create a user to run the WebGUI server process as?";
         my $dialogue = Curses::Widgets::ListBox->new({
@@ -955,9 +1007,48 @@ if( $run_as_user eq 'root' ) {
                 goto ask_what_username_to_use_for_the_new_user;
             }
             my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
-            run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
+
         }
 
+        if( $os eq 'redhat' or $os eq 'debian' ) {
+    
+                run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
+
+        } elsif( $os eq 'darwin' ) {
+
+            # find an available userid
+            my $userid = 501;
+            while(1) {
+                my @userinfo = getpwuid($userid);
+                last if ! @userinfo;  # success; found an available userid; this value is left in $userid
+                $userid++;
+                bail "Failed to find an available UserID <= 2000 on darwin; shouldn't usually happen" if $userid > 2000; 
+            }
+
+            enter "Running several dscl commands to create a new user, ``$run_as_user''.";
+            # based on http://osxdaily.com/2007/10/29/how-to-add-a-user-from-the-os-x-command-line-works-with-leopard/
+            # as with everything Apple, / and . are used on different sites with no explanation about the inconsistency.
+            # apparently on my particular machine, . is correct and / gives an error.  I assume that the opposite is true
+            # on other machines.
+            run "dscl . -create '/Users/$run_as_user'", noprompt => 1;
+            # though it kind of looks like it is, this doesn't create the user's home directory; that's all directory service stuff
+            run "mkdir '/Users/$run_as_user'", noprompt => 1;
+            run "chown '$run_as_user' '/Users/$run_as_user'", noprompt => 1;
+            # Create and set the shell property to bash.
+            run "dscl . -create '/Users/$run_as_user' UserShell /bin/bash", noprompt => 1;
+            # Create and set the user's full name.
+            run "dscl . -create '/Users/$run_as_user' RealName 'WebGUI user'", noprompt => 1;
+            # Create and set the user's ID.
+            run "dscl . -create '/Users/$run_as_user' UniqueID $userid", noprompt => 1;
+            # Create and set the user's group ID property.
+            run "dscl . -create '/Users/$run_as_user' PrimaryGroupID 1000", noprompt => 1;  # XXX can this just be hard-coded to 1000?  stupid examples don't explain the constants.
+            # supposedly but not actually:  Create and set the user home directory.
+            # run "dscl . -create '/Users/$run_as_user' NFSHomeDirectory '/Local/Users/$run_as_user'", noprompt => 1; # no idea what's up with that /Local/Users path; also despite the comment taken from the URL above, this doesn't actually create a home directory inside /Users.
+            # Set the password.
+            run "dscl . -passwd '/Users/$run_as_user' '$new_user_password'", noprompt => 1;
+
+        }
+    
     } else {
         # webgui user does exist; use it
         # XXX should ask and confirm that that's what the user wants
@@ -966,7 +1057,42 @@ if( $run_as_user eq 'root' ) {
     }
 }
 
-if( $mysqld_safe_path) {
+progress(15);
+
+#
+# mysqld
+#
+
+scan_for_mysqld:
+
+my $mysqld_safe_path = `which mysqld_safe 2>/dev/null`; chomp $mysqld_safe_path if $mysqld_safe_path;
+
+my $mysqld_path = `which mysqld 2>/dev/null`; chomp $mysqld_path if $mysqld_path;
+
+if( $mysqld_safe_path and ! $mysqld_path ) {
+    # mysqld is probably hiding in a libexec somewhere and mysqld_safe won't relay a request for --version
+    open my $fh, '<', $mysqld_safe_path or bail "opening ``$mysqld_safe_path'', the mysqld_safe script, for read: $!";
+    while( my $line = readline $fh ) {
+        # looking for a line like this: ledir='/usr/local/libexec'
+        (my $ledir) = $line =~ m/^\s*ledir='(.*)'/ or next;
+        next if $ledir =~ m/\$/;  # not any of the ones with shell variables in them; those run override args to mysqld_safe as given
+        $mysqld_path = $ledir . '/mysqld';
+        $mysqld_path = undef unless -x $mysqld_path;
+    }
+}
+
+my $mysqld_version;
+if( $mysqld_path ) {
+    my $extra = '';
+    $mysqld_version = run "$mysqld_path --version", noprompt => 1;
+    # eg, /usr/local/libexec/mysqld  Ver 5.1.46 for pc-linux-gnu on i686 (Source distribution)
+    # or mysqld  Ver 5.6.20 for osx10.7 on x86_64 (Homebrew)
+    ($mysqld_version) = $mysqld_version =~ m/Ver\s+(\d+\.\d+)\./ if $mysqld_version;
+}
+
+my $mysql_root_password;
+
+if( $mysqld_safe_path ) {
 
     # mysql already exists
 
@@ -993,7 +1119,7 @@ if( $mysqld_safe_path) {
     do {
        my $ps = `ps ax`;
        if( $ps !~ m/mysqld/ ) {
-            bail "wait, thought we had a mysqld at this point, but we don't have a mysqld_safe_path with which to start mysqld"  unless $mysqld_safe_path;
+            bail "wait, thought we had a mysqld at this point, but we don't have a mysqld_safe_path with which to start mysqld"  unless $mysqld_safe_path;  # XXX move this check to earlier on in mysql detection
             update(qq{Starting mysqld...});
             run( qq{ $sudo_command $mysqld_safe_path }, input => $sudo_password, noprompt => 1, background => 1, );
        }
@@ -1102,14 +1228,53 @@ EOF
             close $fh or bail "writing to /etc/sysconfig/network: $!";
         }
 
-        run( "$sudo_command /sbin/chkconfig mysqld on" );
-        run( "$sudo_command /sbin/service mysqld start" ); # this initializes the database, when it works
+        run "$sudo_command /sbin/chkconfig mysqld on";
+        run "$sudo_command /sbin/service mysqld start"; # this initializes the database, when it works
 
-        update( qq{ Please pick a MySQL root password\nDon't forget to write it down.  You'll need it to create other database and manage MySQL.} );
+        update qq{ Please pick a MySQL root password\nDon't forget to write it down.  You'll need it to create other database and manage MySQL.};
         $mysql_root_password = text('MySQL Root Password', '');
-        update( qq{ Setting MySQL root password. } );
-        # run( qq{mysql --user=root -e "SET PASSWORD FOR 'root' = PASSWORD('$mysql_root_password'); SET PASSWORD FOR 'root'\@'localhost' = PASSWORD('$mysql_root_password') SET PASSWORD FOR 'root'\@'127.0.0.1' = PASSWORD('$mysql_root_password');" } );
-        run( "mysqladmin -u root password '$mysql_root_password'" );
+        update qq{ Setting MySQL root password. };
+        # run qq{mysql --user=root -e "SET PASSWORD FOR 'root' = PASSWORD('$mysql_root_password'); SET PASSWORD FOR 'root'\@'localhost' = PASSWORD('$mysql_root_password') SET PASSWORD FOR 'root'\@'127.0.0.1' = PASSWORD('$mysql_root_password');" };
+        run "mysqladmin -u root password '$mysql_root_password'";
+
+    } elsif( ( $root or $sudo_command ) and $os eq 'darwin' ) {
+
+        endwin();    # brew does a curses progress display
+
+        run "brew install mysql";
+
+        init_curses(); main_win(); update();  # fire our curses UI back up again
+
+        # brew doesn't initialize anything, so do that now
+
+        my $basedir = glob "/usr/local/Cellar/mysql/*/";
+
+        update "Installing a MySQL my.cnf config file.";
+        # run "cp /usr/local/Cellar/mysql/*/support-files/my-default.cnf /etc/my.cnf";
+        open my $fh, '>', '/etc/my.cnf' or bail "Failed to open /etc/my.cnf for write: ``$!''.";
+        $fh->print(qq{\n
+# For advice on how to change settings please see the utterly useless
+# http://dev.mysql.com/doc/refman/5.6/en/server-configuration-defaults.html
+# This is a minimal config file.
+# For an example of more options, see the template for the default config file:
+# https://github.com/percona/mysql/blob/mysql-5.7/support-files/my-default.cnf.sh
+
+[mysqld]
+
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES 
+
+datadir = /usr/local/var/mysql
+basedir = $basedir
+}) or bail "Failed to write to /etc/my.cnf: ``$!''.";
+
+        update "Initializing the MySQL database.";
+
+        run "chown -R $run_as_user /usr/local/var/mysql", noprompt => 1;
+        run "sudo -u $run_as_user mysql_install_db --basedir $basedir --datadir /usr/local/var/mysql'", noprompt => 1;
+
+        run "mkdir -p /Users/$run_as_user/Library/LaunchAgents", noprompt => 1;  # XXX this doesn't look like it will run on machine startup
+        run "chown $run_as_user /Users/$run_as_user/Library/LaunchAgents", noprompt => 1;
+        run "sudo -u $run_as_user /usr/local/bin/mysqld_safe", background => 1, noprompt => 1;
 
     } else {
         enter(qq{
@@ -1121,7 +1286,7 @@ EOF
     update( qq{ Deleting MySQL anonymous user. } );
     run( qq{mysql --user=root --password=$mysql_root_password -e "drop user '';" } );
 
-}
+}  # end else install/setup mysql
 
 progress(20);
 
@@ -1163,7 +1328,7 @@ do {
         if( $os eq 'debian' ) {
 
             # run( $sudo_command . 'apt-get update', noprompt => 1, );
- # XXXX yes, but are we installing perlmagick for the *correct* perl install?  not if they built their own perl
+ # XXXX yes, but are we installing perlmagick for the *correct* perl install?  not if they built their own perl.  regardless, that should get the deps installed so that cpanm can build Image::Magick as well.
             run( "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx" );
 
         } elsif( $os eq 'redhat' ) {
@@ -1199,11 +1364,21 @@ EOF
             close $fh;
             run( $sudo_command . 'yum install --assumeyes nginx' );
 
+        } elsif( $os eq 'darwin' ) {
+
+            endwin();    # brew does a curses progress display
+
+            # xz is a dep for perlmagick but it isn't listed; it provides lzma for one of the image compressors or something
+
+            run "$sudo_command brew install openssl expat nginx xz perlmagick";
+
+            init_curses(); main_win(); update();  # fire our curses UI back up again
+
         }
 
     } else {
 
-        enter( "WebGUI needs the perlmagick libssl-dev libexpat1-dev git curl and build-essential packages but I'm not running as root or I'm on a strange system so I can't install them; please either install these or else run this script as root." ); # XXXX
+        enter( "WebGUI needs the perlmagick libssl-dev libexpat1-dev git curl and build-essential packages but I'm not running as root or I'm on a strange system so I can't install them; please either install these (or their equivilents) or else run this script as root.\nThen resume or restart this installer." ); 
 
     }
 };
@@ -1252,13 +1427,22 @@ progress(40);
 # fetch cpanm
 #
 
-if( -f '/root/cpanm.test') {
+if( -f 'WebGUI/sbin/cpanm' and ! system '( perl -c WebGUI/sbin/cpanm 2>&1 ) > /dev/null') {
+
+    # already installed; do nothing
+    update "The cpanm utility is already installed; not re-installing";
+
+} elsif( -f '/root/cpanm.test') {
+
     update( "Devel -- Installing the cpanm utility to use to install Perl modules from a cached copy" );
     run "cp -a /root/cpanm.test WebGUI/sbin/cpanm", noprompt =>1;
+
 } else {
+
     update "Installing the cpanm utility to use to install Perl modules..." ;
     run 'curl --insecure --location http://cpanmin.us --output WebGUI/sbin/cpanm', noprompt => 1;
     run 'chmod ugo+x WebGUI/sbin/cpanm', noprompt => 1;
+
 }
 
 progress(45);
@@ -1267,10 +1451,17 @@ progress(45);
 # wgd
 #
 
-if( -f '/root/wgd.test' ) {
+if( -f 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/null' ) {
+
+    update "The wgd utility is already installed; not re-installing";
+
+} elsif( -f '/root/wgd.test' ) {
+
     update( "Devel -- Installing the wgd utility from a cached copy" );
     run "cp -a /root/wgd.test WebGUI/sbin/wgd", noprompt =>1;
+
 } else {
+
     update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades...", noprompt => 1, );
   try_wgd_again:
     run( 'curl --insecure --location http://haarg.org/wgd > WebGUI/sbin/wgd', nofatal => 1, noprompt => 1, ) or do {
@@ -1278,6 +1469,7 @@ if( -f '/root/wgd.test' ) {
         goto try_wgd_again;
     };
     run 'chmod ugo+x WebGUI/sbin/wgd', noprompt => 1;
+
 }
 
 progress(50);
@@ -1296,12 +1488,9 @@ do {
         run( "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, noprompt => 1, );
     } else {
         # backup plan is to build an extlib directory
-        mkdir "$install_dir/extlib"; # XXX moved this up outside of 'WebGUI'
+        mkdir "$install_dir/extlib"; # this is up and outside of 'WebGUI'
         run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out XXX probably needs a non-interactive mode
         run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1, );
-    }
-    if( $os eq 'redhat' ) {
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
     }
 };
 
@@ -1312,15 +1501,19 @@ do {
 do {
 
     update( "Checking for any additional needed Perl modules..." );
-    # XXX Task::WebGUI
-    my $test_environment_output = run( "$perl WebGUI/sbin/testEnvironment.pl --noprompt --simpleReport", ); 
-# XXX $test_environment_output or ... handle failure
-    # Checking for module Weather::Com::Finder:         OK
+
+    if( $os eq 'redhat' ) {
+        run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
+    }
+
+    my $test_environment_output = run "$perl WebGUI/sbin/testEnvironment.pl --noprompt --simpleReport", nofatal => 1;  # it's okay if it finds things not installed because we're installing them
+    # eg: Checking for module Weather::Com::Finder:         OK
     my @results = grep m/Checking for module/, split m/\n/, $test_environment_output;
     for my $result ( @results ) {
         next if $result =~ m/:.*OK/;
         $result =~ s{:\s+.*}{};
         $result =~ s{Checking for module }{};
+        next if $result eq 'Imager::File::PNG' and $os eq 'darwin'; # Imager::Probe is failing sooo hard; I could spoon fed it, but it's ignoring it and coming up with garbage
         update( "Installing Perl module $result from CPAN:" );
         if( $root or $sudo_command or -w $Config{sitelib_stem} ) {
             # if it's a perlbrew perl and the libs directory is writable by this user, or we're root, or we have sudo, just
@@ -1339,8 +1532,8 @@ do {
 
 do {
     local $SIG{__DIE__};
-    eval "use Config::JSON;";
-    eval "use Template";
+    eval "use Config::JSON; 1;" or bail "trying to load Config::JSON after installing it: ``$@''";
+    eval "use Template; 1;" or bail "trying to load Template after installing it: ``$@''";
 };
 
 progress(60);
@@ -1444,39 +1637,84 @@ do {
     # create nginx config
     # start nginx
 
-    update "Setting up nginx main config";
-    if( -f "/etc/nginx/conf.d/webgui8.conf" ) {
-        enter "There's already an /etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\n";
-    } else {
-        # nginx.conf does an include [% webgui_root %]/etc/*.nginx
-        eval { 
-            template(nginx_conf(), "/etc/nginx/conf.d/webgui8.conf", { } )            # XXX this is on CentOS; is it the same on Debian?
-        } or bail "Failed to template nginx.conf to etc/nginx/conf.d/webgui8.conf: $@";
+    update "Setting up nginx config";
+
+    # first, fuss about nginx.conf itself
+
+    if( -f "/$nginx_etc/nginx/conf.d/default.conf" ) {
+        update "Remove the default, stock per-site nginx config file?  Don't remove it if you've made changes to it and are using it!";
+        run "rm /$nginx_etc/nginx/conf.d/default.conf";   # this is on CentOS; is it the same on Debian?  source install?
     }
 
-    if( -f '/etc/nginx/conf.d/default.conf' ) {
-        update "Remove the default, stock nginx config file?  Don't remove it if you've made changes to it and are using it!";
-        run "rm /etc/nginx/conf.d/default.conf";   # XXX this is on CentOS; is it the same on Debian?
+    if( ! -f "/$nginx_etc/nginx/nginx.conf" ) {
+
+        # no main config file at all; this suggests a problem
+        bail "Failed to find nginx.conf in ``/$nginx_etc/nginx/nginx.conf''; did nginx install okay?";
+
+    } elsif( ! grep_file qr{include .*/etc/nginx/conf.d/\*.conf}, "/$nginx_etc/nginx/nginx.conf" ) {
+
+        # the "include /etc/nginx/conf.d/*.conf" line was *not* found; we can clobber the nginx.conf here.
+        # trying to append to it.
+        # once there's a line like "include /$nginx_etc/nginx/conf.d/*.conf" in the config, we can just add conf.d/webgui8.conf.
+
+        update "Appending to the main nginx.conf.\nThis probably won't work.\nDanger:  Skip this step and edit yourself manually later if you don't want this!\nPress Enter to continue or 's' to skip.\n"; # XXX untested, but this applies to OSX
+        if( $verbosity >= 0 ) {
+            my $key = scankey($mwh);
+            goto skip_append if $key =~ m/s/i;
+        }
+
+        open my $fh, '>>', "/$nginx_etc/nginx/nginx.conf" or bail "Failed to open /$nginx_etc/nginx.conf for append: $!.";
+        $fh->print("\ninclude $install_dir/WebGUI/etc/*.nginx;\n") or bail "Failed to write to /$nginx_etc/nginx.conf: $!.";
+        close $fh or bail "Failed to close nginx.conf: $!.";
+
+      skip_append:
+
     }
+
+    # generate a conf.d/webgui.conf, which does an include [% webgui_root %]/etc/*.nginx.
+
+    if( -f "/$nginx_etc/nginx/conf.d/webgui8.conf" ) {
+
+        enter "There's already an /$nginx_etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\n";
+
+    } else {
+
+        # add a webgui8.conf to conf.d.
+
+        if( ! -d "/$nginx_etc/nginx/conf.d" ) {
+            update "Creating an /$nginx_etc/nginx/conf.d directory.\n";
+            mkdir "/$nginx_etc/nginx/conf.d" or bail "Failed to create an /$nginx_etc/nginx/conf.d directory: ``$!''.";
+        }
+
+        eval { 
+            template(nginx_conf(), "/$nginx_etc/nginx/conf.d/webgui8.conf", { } )            # this exists on CentOS; is it the same on Debian?  looks like it.
+        } or bail "Failed to template webgui8.conf to /$nginx_etc/nginx/conf.d/webgui8.conf: ``$@''.";
+
+    }
+
+    # set up the nginx conf file under $install_dir for the webgui site we're setting up
 
     update "Setting up nginx per-site config";
+
     # addsite.pl does this as a two-step process
     # $file->copy($config->getRoot("/var/setupfiles/nginx.template"), $config->getRoot("/var/nginx.template"), { force => 1 });
     # $file->copy($wreConfig->getRoot("/var/nginx.template"), $wreConfig->getRoot("/etc/".$sitename.".nginx"), { templateVars => $params, force => 1 });
-    # XXX we're putting $sitename.nginx in WebGUI/etc, not wre/etc; probably have to change the main nginx.conf to match; yup, testing
+    # we're putting $sitename.nginx in WebGUI/etc, not wre/etc; changed the main nginx.conf to match
+
     eval { 
         template(nginx_template(), "$install_dir/WebGUI/etc/$database_name.nginx", { } ) 
-    } or bail "Failed to template nginx.template to $install_dir/WebGUI/etc/$database_name.nginx: $@";
+    } or bail "Failed to template nginx.template to $install_dir/WebGUI/etc/$database_name.nginx: ``$@''";
 
-    if( ! -f "$install_dir/WebGUI/etc/mime.types" ) {
-        update "Setting up mime.types file, which is needed by nginx";
-        # cp "$starting_dir/setupfiles/mime.types", "$install_dir/WebGUI/etc/mime.types" or 
-        #    bail "Copying $starting_dir/setupfiles/mime.types to $install_dir/WebGUI/etc/mime.types failed: $@";
-        open my $fh, '>', "$install_dir/WebGUI/etc/mime.types" or 
-            bail "Failed to open $install_dir/WebGUI/etc/mime.types for write: $!";
-        # $fh->print(mime_types()) or bail "Writing $install_dir/WebGUI/etc/mime.types failed; $!"; # is there a problem with the one it comes with?
-        $fh->close or bail "Writing $install_dir/WebGUI/etc/mime.types failed; $!";
-    }
+    # the per-site nginx config file does not in fact include mime.types; the main nginx.conf file does, but it has its own in /etc/nginx
+    # if( ! -f "$install_dir/WebGUI/etc/mime.types" ) {
+    #     update "Setting up mime.types file, which is included from the per-site nginx config file";
+    #     # cp "$starting_dir/setupfiles/mime.types", "$install_dir/WebGUI/etc/mime.types" or 
+    #     #    bail "Copying $starting_dir/setupfiles/mime.types to $install_dir/WebGUI/etc/mime.types failed: $@";
+    #     open my $fh, '>', "$install_dir/WebGUI/etc/mime.types" or 
+    #         bail "Failed to open $install_dir/WebGUI/etc/mime.types for write: $!";
+    #     # $fh->print(mime_types()) or bail "Writing $install_dir/WebGUI/etc/mime.types failed; $!"; # is there a problem with the one it comes with?
+    #     $fh->close or bail "Writing $install_dir/WebGUI/etc/mime.types failed; $!";
+    # }
 
     update "Having nginx test nginx.conf and the conf files it pulls in";
     run "nginx -t", noprompt => 1;
@@ -1486,6 +1724,8 @@ do {
     } elsif( $os eq 'redhat' ) {
         run "$sudo_command /sbin/chkconfig nginx on", noprompt => 1 ;
         run "$sudo_command /sbin/service nginx start", noprompt => 1 ;
+    } elsif( $os eq 'darwin' ) {
+        # XXX
     }
 
 };
@@ -1505,6 +1745,8 @@ do {
             template(services_redhat(), "/etc/rc.d/init.d/webgui8", { } ) 
         } or bail "Failed to template startup file into /etc/rc.d/init.d/webgui8: $@";
         run "chmod ugo+x /etc/rc.d/init.d/webgui8", noprompt => 1;
+    } elsif( $os eq 'darwin' ) {
+        # XXX
     }
 };
 
@@ -1556,10 +1798,9 @@ progress(90);
 do {
 
     update "Fixing log file permissions";    
-    run "chown $run_as_user $log_files/*.log", noprompt => 1; # not sure how that winds up as root (during upgrades I guess) but not being able to write it was breaking things; running wgd --upgrade as $run_as_user now, after some pain, and this is still happening!
-    # still not enough... I guess webgui.log doesn't exist yet, gets created as owned by root, then plack tries to re-open it and fails; doing killall starman, rm webgui.log, service start starman seems to suggest that this is the case
+
     run "touch $log_files/webgui.log", noprompt => 1;
-    run "chown $run_as_user $log_files/*.log", noprompt => 1; # testing... again after touching the file
+    run "chown $run_as_user $log_files/*.log", noprompt => 1;
 
     if( $os eq 'debian' ) {
         # XXX
@@ -1567,6 +1808,8 @@ do {
         update "Attempting to start the WebGUI server process...\n";
         run "$sudo_command /sbin/chkconfig webgui8 on", noprompt => 1 ;
         run "$sudo_command /sbin/service webgui8 start", noprompt => 1, background => 1 ; # XXX working around this process going zombie
+    } elsif( $os eq 'darwin' ) {
+        # XXX
     }
 };
 
@@ -1628,7 +1871,7 @@ EOF
 sub template {
     my $infn = shift;
     my $outfn = shift;
-    my $var = shift;
+    my $var = shift() || { };
 
     # $var->{config}      =  $config; # XXXX change references or else mock up an object
     # $var->{wreRoot}     = $config->getRoot; # doesn't seem to actually be used in the installfiles templates; however, config.getRoot is used and I think is the same thing, which is problematic
@@ -1671,20 +1914,32 @@ END {
 #
 
 sub nginx_conf {
-    <<'EOF';
-# sendfile        on; # duplicate with /etc/nginx/nginx.conf; causes a fatal error; have to trust that it's right in /etc/nginx/nginx.conf or else check that it's right in there
-# gzip  on;           # in at least one report, duplicate with /etc/nginx/nginx.coknf; causes a fatal error
-gzip_types text/plain text/css application/json application/json-rpc application/x-javascript text/xml application/xml application/xml+rss text/javascript;
-gzip_comp_level 5;
 
-##Include per-server vhost configuration files.
+    # generates the stub nginx/conf.d/webgui8.conf that includes the etc/nginx.conf under $webgui_root
+
+    # removed from the template:
+    # sendfile        on; # duplicate with /etc/nginx/nginx.conf; causes a fatal error; have to trust that it's right in /etc/nginx/nginx.conf or else check that it's right in there
+    # gzip  on;           # in at least one report, duplicate with /etc/nginx/nginx.conf; causes a fatal error
+
+    # this stuff probably doesn't help anything either:
+    # gzip_types text/plain text/css application/json application/json-rpc application/x-javascript text/xml application/xml application/xml+rss text/javascript;
+    # gzip_comp_level 5;
+
+    my $text = <<'EOF';
+
+## Include per-server WebGUI vhost configuration files.
 include [% webgui_root %]/etc/*.nginx;
 EOF
+    eval {
+        template( $text, "/$nginx_etc/nginx/conf.d/webgui8.conf" )
+    } or bail "Failed to template webgui8.conf to ``$nginx_etc/nginx/conf.d/webgui8.conf'': $@.";
 }
 
 sub nginx_template {
     <<'EOF';
 ##Force all domain requests, mysite.com, to go to www.mysite.com
+http {
+
 [% IF domain_name_has_www %]
 server {
     server_name [% domain_sans_www %];
@@ -1692,82 +1947,84 @@ server {
 }
 [% END %]
 
-server {
-    server_name [% sitename %];
-
-    listen 80; ## listen for ipv4
-
-    # access_log [% domainRoot %]/[% sitename %]/logs/access.log combined;
-    access_log [% log_files %]/[% sitename %].access.log combined;
-    root       [% domainRoot %]/[% sitename %]/public;
-    client_max_body_size 20M;
-
-    # proxy webgui to starman listening on 127.0.0.1
-    location / {
-        # proxy_cache static;
-        # proxy_cache_valid 200 1s;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header Host $host;
-        proxy_pass   http://127.0.0.1:[% webgui_port %];
+    server {
+        server_name [% sitename %];
+    
+        listen 80; ## listen for ipv4
+    
+        # access_log [% domainRoot %]/[% sitename %]/logs/access.log combined;
+        access_log [% log_files %]/[% sitename %].access.log combined;
+        root       [% domainRoot %]/[% sitename %]/public;
+        client_max_body_size 20M;
+    
+        # proxy webgui to starman listening on 127.0.0.1
+        location / {
+            # proxy_cache static;
+            # proxy_cache_valid 200 1s;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Host $host;
+            proxy_pass   http://127.0.0.1:[% webgui_port %];
+        }
+    
+        location /extras/ {
+            add_header Cache-Control public;
+            expires 24h;
+            root   [% webgui_root %]/www/;
+            add_header Access-Control-Allow-Origin *;
+        }
+    
+        location /uploads/filepump { expires max; }
+        location = /default.ida    { access_log off; deny all; }
+        location /_vti_bin         { access_log off; deny all; }
+        location /_mem_bin         { access_log off; deny all; }
+        location ~ /\.(ht|wg)      { access_log off; deny all; }
+        location = /alive          { access_log off; }
     }
+    
+    #server {
+    #    listen   443;
+    #    server_name  [% sitename %] [%domain %];
+    #
+    #    ssl  on;
+    #    ssl_certificate [% domainRoot %]/[% sitename %]/certs/server.crt;
+    #    ssl_certificate_key [% domainRoot %]/[% sitename %]/certs/server.key;
+    #
+    #    ssl_session_timeout  5m;
+    #
+    #    ssl_protocols  SSLv3 TLSv1;
+    #    ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv3:+EXP;
+    #    ssl_prefer_server_ciphers   on;
+    #
+    #    access_log [% domainRoot %]/[% sitename %]/logs/access.log combined
+    #    root       [% domainRoot %]/www.example.com/public;
+    #
+    #    # proxy webgui to starman listening on 127.0.0.1
+    #    location / {
+    #        # proxy_cache static;
+    #        # proxy_cache_valid 200 1s;
+    #        proxy_set_header X-Real-IP $remote_addr;
+    #        proxy_set_header X-Forwarded-For $remote_addr;
+    #        proxy_set_header Host $host;
+    #        proxy_pass   http://127.0.0.1:[% webgui_port %];
+    #    }
+    #
+    #    location /extras/ {
+    #        add_header Cache-Control public;
+    #        expires 24h;
+    #        root   /data/WebGUI/www/extras;
+    #        add_header Access-Control-Allow-Origin *;
+    #    }
+    #
+    #    location /uploads/filepump { expires max; }
+    #    location = /default.ida    { access_log off; deny all; }
+    #    location /_vti_bin     { access_log off; deny all; }
+    #    location /_mem_bin     { access_log off; deny all; }
+    #    location ~ /\.(ht|wg)      { access_log off; deny all; }
+    #    location = /alive      { access_log off; }
+    #}
 
-    location /extras/ {
-        add_header Cache-Control public;
-        expires 24h;
-        root   [% webgui_root %]/www/;
-        add_header Access-Control-Allow-Origin *;
-    }
-
-    location /uploads/filepump { expires max; }
-    location = /default.ida    { access_log off; deny all; }
-    location /_vti_bin         { access_log off; deny all; }
-    location /_mem_bin         { access_log off; deny all; }
-    location ~ /\.(ht|wg)      { access_log off; deny all; }
-    location = /alive          { access_log off; }
 }
-
-#server {
-#    listen   443;
-#    server_name  [% sitename %] [%domain %];
-#
-#    ssl  on;
-#    ssl_certificate [% domainRoot %]/[% sitename %]/certs/server.crt;
-#    ssl_certificate_key [% domainRoot %]/[% sitename %]/certs/server.key;
-#
-#    ssl_session_timeout  5m;
-#
-#    ssl_protocols  SSLv3 TLSv1;
-#    ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv3:+EXP;
-#    ssl_prefer_server_ciphers   on;
-#
-#    access_log [% domainRoot %]/[% sitename %]/logs/access.log combined
-#    root       [% domainRoot %]/www.example.com/public;
-#
-#    # proxy webgui to starman listening on 127.0.0.1
-#    location / {
-#        # proxy_cache static;
-#        # proxy_cache_valid 200 1s;
-#        proxy_set_header X-Real-IP $remote_addr;
-#        proxy_set_header X-Forwarded-For $remote_addr;
-#        proxy_set_header Host $host;
-#        proxy_pass   http://127.0.0.1:[% webgui_port %];
-#    }
-#
-#    location /extras/ {
-#        add_header Cache-Control public;
-#        expires 24h;
-#        root   /data/WebGUI/www/extras;
-#        add_header Access-Control-Allow-Origin *;
-#    }
-#
-#    location /uploads/filepump { expires max; }
-#    location = /default.ida    { access_log off; deny all; }
-#    location /_vti_bin     { access_log off; deny all; }
-#    location /_mem_bin     { access_log off; deny all; }
-#    location ~ /\.(ht|wg)      { access_log off; deny all; }
-#    location = /alive      { access_log off; }
-#}
 EOF
 }
 
