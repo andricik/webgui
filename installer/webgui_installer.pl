@@ -1010,9 +1010,17 @@ if( $run_as_user eq 'root' ) {
 
         }
 
-        if( $os eq 'redhat' or $os eq 'debian' ) {
+        if( $os eq 'redhat' ) {
     
-                run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
+            run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
+
+        } elsif( $os eq 'debian' ) {
+
+            # XXX redhat might be the same but I got a report from a Debian machine with this error output:
+            # useradd damian --password  --shell /bin/bash:
+            # Usage: useradd [options] LOGIN
+
+            run "useradd --password $new_user_password --shell /bin/bash $run_as_user";  # on Debian, it defaults to dash if we don't specify bash; also, put the login name on the end
 
         } elsif( $os eq 'darwin' ) {
 
