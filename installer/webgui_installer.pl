@@ -59,7 +59,6 @@ XXXXX add instructions for starting spectre into the startup .sh we generate and
 
 XXX Silly that we run mkdir via shell.  We really need run()-like error handling but for closures we pass in.
 XXX plebgui support
-XXX don't overwrite an existing nginx.conf without permission
 XXX warn about impossiblely early date time; Curses wouldn't build
 XXX service startup stuff on Debian, nginx config on Debian
 XXX sudo mode hasn't been tested recently and is almost certainly broken
@@ -778,17 +777,19 @@ my $input_key = *Curses::Widgets::TextField::input_key{CODE};
 do {
     enter(qq{
         Welcome to the WebGUI8 installer utility!
-        Currently supported platforms are Debian GNU/Linux and CentOS GNU/Linux.
+        Currently supported platforms are Debian GNU/Linux, CentOS GNU/Linux, and MacOS X.
         You may press control-C at any time to exit.
         Examine commands before they're run to make sure that they're what you want to do!
     });
 
     enter(qq{
-        This script is provided without warranty, including warranty for merchantability, suitability for any purpose, and is not warrantied against special or incidental damages.  It may not work, and it may even break things.  Use at your own risk!  Always have good backups.  Consult the included source for full copyright and license.
+        This script is provided without warranty, including warranty for merchantability, suitability for any purpose, and is not warrantied against special or incidental damages.  It may not work, and it may even break things.  Use at your own risk!  Always have good backups.
     });
 
+    # XXX could offer to display the license
+
     enter(qq{
-        The full license (GNU GPL v2) is available from https://raw.github.com/gist/2973558/docs/license.txt
+        The full license (GNU GPL v2) is available from https://raw.githubusercontent.com/AlliumCepa/webgui/master/docs/license.txt
         By using this software, you agree to the terms and conditions of the license.
     });
 
@@ -1168,6 +1169,9 @@ if( $mysqld_safe_path ) {
 
     # end of the scenario where we found a mysqld already installed and we just need to get the root password before we can continue
 
+    update( qq{ Deleting MySQL anonymous user. } );
+    run qq{mysql --user=root --password=$mysql_root_password -e "drop user '';" }, nofatal => 1;
+
 } else {
 
     # install and set up MySQL
@@ -1213,11 +1217,6 @@ if( $mysqld_safe_path ) {
         init_curses(); # $mwh = Curses->new; # re-init the screen (echo off, etc)
         main_win();  update();    # redraw
 
-        # go look for mysqld again now that it should be installed
-        # this also gives the installer another chance to ask for the root password, which the user set as part of shelling out to apt-get
-
-        goto scan_for_mysqld;
-
     } elsif( ( $root or $sudo_command ) and $os eq 'redhat' ) {
 
         run( "$sudo_command yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
@@ -1248,6 +1247,7 @@ EOF
     } elsif( ( $root or $sudo_command ) and $os eq 'darwin' ) {
 
         endwin();    # brew does a curses progress display
+        print "\n" x 100;
 
         run "brew install mysql";
 
@@ -1278,7 +1278,7 @@ basedir = $basedir
         update "Initializing the MySQL database.";
 
         run "chown -R $run_as_user /usr/local/var/mysql", noprompt => 1;
-        run "sudo -u $run_as_user mysql_install_db --basedir $basedir --datadir /usr/local/var/mysql'", noprompt => 1;
+        run "sudo -u $run_as_user mysql_install_db --basedir $basedir --datadir /usr/local/var/mysql", noprompt => 1;
 
         run "mkdir -p /Users/$run_as_user/Library/LaunchAgents", noprompt => 1;  # XXX this doesn't look like it will run on machine startup
         run "chown $run_as_user /Users/$run_as_user/Library/LaunchAgents", noprompt => 1;
@@ -1291,8 +1291,10 @@ basedir = $basedir
         goto scan_for_mysqld;
     }
 
-    update( qq{ Deleting MySQL anonymous user. } );
-    run( qq{mysql --user=root --password=$mysql_root_password -e "drop user '';" } );
+    # go look for mysqld again now that it should be installed
+    # this also gives the installer another chance to ask for the root password, which the user set as part of shelling out to apt-get
+
+    goto scan_for_mysqld;
 
 }  # end else install/setup mysql
 
@@ -1659,7 +1661,10 @@ do {
         # no main config file at all; this suggests a problem
         bail "Failed to find nginx.conf in ``/$nginx_etc/nginx/nginx.conf''; did nginx install okay?";
 
-    } elsif( ! grep_file qr{include .*/etc/nginx/conf.d/\*.conf}, "/$nginx_etc/nginx/nginx.conf" ) {
+    } elsif(
+        ! grep_file qr{include .*/etc/nginx/conf.d/\*.conf}, "/$nginx_etc/nginx/nginx.conf" and
+        ! grep_file qr{include .*/WebGUI/etc/\*.nginx}, "/$nginx_etc/nginx/nginx.conf" 
+    ) {
 
         # the "include /etc/nginx/conf.d/*.conf" line was *not* found; we can clobber the nginx.conf here.
         # trying to append to it.
@@ -1844,6 +1849,8 @@ do {
 
     open my $fh, '>', "$install_dir/webgui.sh" or bail "failed to open $install_dir/webgui.sh for write: $!";
     $fh->print(<<EOF) or bail "failed to write to $install_dir/webgui.sh: $!";
+$mysqld_safe_path &
+nginx &
 cd $install_dir/WebGUI
 export PERL5LIB="\$PERL5LIB:$install_dir/WebGUI/lib"
 plackup --port $webgui_port app.psgi &
@@ -1948,12 +1955,12 @@ sub nginx_template {
 ##Force all domain requests, mysite.com, to go to www.mysite.com
 http {
 
-[% IF domain_name_has_www %]
-server {
-    server_name [% domain_sans_www %];
-    rewrite ^ $scheme://[% domain %]$request_uri redirect;
-}
-[% END %]
+    # [% IF domain_name_has_www %]
+    # server {
+    #     server_name [% domain_sans_www %];
+    #     rewrite ^ $scheme://[% domain %]$request_uri redirect;
+    # }
+    # [% END %]
 
     server {
         server_name [% sitename %];
