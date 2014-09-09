@@ -4,19 +4,19 @@
 
 # yum install wget
 # yum install perl
-# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate    XXX no longer where it lives
+# wget https://raw.githubusercontent.com/AlliumCepa/webgui/master/installer/webgui_installer.pl --no-check-certificate
 # perl webgui_installer.pl
 
 # to run this installer on Debian, do:
 
 # apt-get install wget
 # apt-get install perl 
-# wget https://raw.github.com/gist/2973558/webgui_installer.pl --no-check-certificate    XXX no longer where it lives
+# wget https://raw.githubusercontent.com/AlliumCepa/webgui/master/installer/webgui_installer.pl --no-check-certificate
 # perl webgui_installer.pl
 
 # The full README is here:
 
-# https://raw.github.com/gist/2973558/README
+#  https://raw.githubusercontent.com/AlliumCepa/webgui/master/docs/license.txt
 
 # And the full license is here:
 
@@ -1494,13 +1494,16 @@ do {
         # if it fails, hopefully it wasn't important or else testEnvironment.pl can pick up the slack
         # XXX should send reports when modules fail to build
         # these don't have noprompt because RedHat users are cranky about perl modules not coming through their package system and I promised them that I would let them approve everything significant before it happens; need an ultra-low-verbosity verbosity setting
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, noprompt => 1, );
+        run "$sudo_command $perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out
+        run "$sudo_command $perl WebGUI/sbin/cpanm -n Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
+        run "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, noprompt => 1;
     } else {
         # backup plan is to build an extlib directory
+        # XXX this hasn't been tested in a long time
         mkdir "$install_dir/extlib"; # this is up and outside of 'WebGUI'
-        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1, );  # this one likes to time out XXX probably needs a non-interactive mode
-        run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1, );
+        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out XXX probably needs a non-interactive mode
+        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
+        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1;
     }
 };
 
@@ -1523,16 +1526,17 @@ do {
         next if $result =~ m/:.*OK/;
         $result =~ s{:\s+.*}{};
         $result =~ s{Checking for module }{};
-        next if $result eq 'Imager::File::PNG' and $os eq 'darwin'; # Imager::Probe is failing sooo hard; I could spoon fed it, but it's ignoring it and coming up with garbage
+        my $nofatal = 0;
+        $nofatal = 1 if $result eq 'Imager::File::PNG'; # Imager::Probe is failing sooo hard; I could spoon fed it, but it's ignoring it and coming up with garbage; oh joy... it's failing on Debian, too
         update( "Installing Perl module $result from CPAN:" );
         if( $root or $sudo_command or -w $Config{sitelib_stem} ) {
             # if it's a perlbrew perl and the libs directory is writable by this user, or we're root, or we have sudo, just
             # install the module stright into the site lib.
-            run( "$sudo_command $perl WebGUI/sbin/cpanm -n $result", noprompt => 1, );
+            run "$sudo_command $perl WebGUI/sbin/cpanm -n $result", noprompt => 1, nofatal => $nofatal;
         } else {
             # backup plan is to build an extlib directory
             mkdir "$install_dir/extlib"; # XXX moved this up outside of 'WebGUI'
-            run( "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib $result", noprompt => 1, );
+            run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib $result", noprompt => 1, nofatal => $nofatal;
         }
     }
 
