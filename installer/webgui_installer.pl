@@ -40,60 +40,42 @@ install webgui 8, using my little tweaks to get things going.
 bash/perl handling magic from http://www.perlmonks.org/?node_id=825147
 xdanger
 
-XXX todo:
+todo:
 
 * we need something like run() but that takes a closure instead of shell commands.
 * configuring mysql with a blank password in Debian doesn't seem to work
-* in curses installer, sudo password is echoed in plaintext and remains on screen during installation.
-Error messages during apt-get stomp all over screen layout
+* in curses installer, sudo password is echoed in plaintext and remains on screen during installation, one user reports.
+* Error messages during apt-get stomp all over screen layout, one user reports.
 * Nice to have: a log of all the user selections and computed directories, database names, options, etc., for later reference or debugging.
-* It would be nice to have a set of command-line parameters to install WebGUI in an "unattended" mdoe mode*
-* select privilege_type from `information_schema`.`schema_privileges` where grantee like "'webgui'%" and table_schema='www_example_com';
-* This may have been mentioned before, but the installer doesn't like perlbrew. 
-I had to revert to system perl before the Curses UI worked.
-* But this doesn't [work]: # perl /opt/webgui/installer/webgui_installer.pl ... can't open /opt/webgui/installer//opt/webgui/installer/webgui_installer.pl: No such file or directory at     webgui/installer/webgui_instal
-ler.pl line 173, <STDIN> line 2.
-* Should permit empty MySQL password -- don't even ask the user for the password if no password is set. 
-
-XXXXX add instructions for starting spectre into the startup .sh we generate and check the hostname to make sure it resolves to the host (otherwise spectre won't work)
-
-XXX Silly that we run mkdir via shell.  We really need run()-like error handling but for closures we pass in.
-XXX plebgui support
-XXX warn about impossiblely early date time; Curses wouldn't build
-XXX service startup stuff on Debian, nginx config on Debian
-XXX sudo mode hasn't been tested recently and is almost certainly broken
-XXX check for spaces and other things in filenames and complain about them
-XXX our /tmp install Curses bootstrap attempt is pathetic; should use local::lib perhaps
-XXX on 64 bit debian, use the 64 bit specific package names!
-XXX run() should take a 'requires root' flag and that should prompt the user to run things in a root terminal if not root
-    and there's no sudo password
-XXX error if a 'webgui' user already exists -- don't reset the password! ... where did this logic go?  had to re-write it
-XXX /home/scott/bin/perl WebGUI/sbin/wgd reset --upgrade -- really not sure that's running and doing anything
-XXX app.psgi should probably just do a 'use libs "extlib"' so that the user doesn't have to set up the local lib
-
-TODO:
-
+* It would be nice to have a set of command-line parameters to install WebGUI in an "unattended" mode
+* This may have been mentioned before, but the installer doesn't like perlbrew.  I had to revert to system perl before the Curses UI worked, one user reports.
+* add instructions for starting spectre into the startup .sh we generate and check the hostname to make sure it resolves to the host (otherwise spectre won't work)
+* plebgui support
+* warn about impossiblely early date time; Curses wouldn't build
+* service startup stuff on Debian and OSX, nginx config on Debian untested
+* sudo mode hasn't been tested recently and is almost certainly broken
+* check for spaces and other things in filenames and complain about them
+* our /tmp install Curses bootstrap attempt is pathetic; should use local::lib perhaps
+* on 64 bit debian, use the 64 bit specific package names!
+* run() should take a 'requires root' flag and that should prompt the user to run things in a root terminal if not root and there's no sudo password
+* app.psgi should probably just do a 'use libs "extlib"' so that the user doesn't have to set up the local lib
 * Report on passwords created for various accounts at the end of the install
 * Does it make sense to install one system-wide plack/starman startup file?  Doesn't handle multiple installations but maybe does multiple sites on one install even though they all share logs?  Or does it make more sense to install one system startup file for each site installed?
 * setupfiles/wre.logrotate is unusused by us; do Debian and RedHat rotate mysql logs?  probably.  anyway, we probably also need to rotate the webgui.log.
 * in verbose mode, put commands up for edit in a textbox with ok and cancel buttons
-* maybe start script as a shell script then either unpack a perl script or self perk <<EOF it
+* maybe start script as a shell script then either unpack a perl script or self perl <<EOF it
 * offer help for modules that won't install
-* use WRE libs to do config file instead?  depends on the wre.conf, hard-codes in the prereqs path, other things
-* cross-reference this with my install instructions
 * save/restore variables automatically since we're asking for so many things?  tough for passwords though
-* don't just automatically apt-get install perlmagick; handle system perl versus source install of perl scenarios
 * take command line arg options for the various variables we ask the user so people can run this partially or non interactively
 * ultra-low verbosity (fully automatic) mode
 * would be awesome if this could diagnose and repair common problems
 * even without using the WRE library code, look for mysql and such things in $install_root/wre and use them if there?
+* add webgui to the system startup!  I think there's something like this in the WRE
 
-done/notes:
+notes:
 
-$run_as_user never gets changed from eg root; need to offer to create a webgui user; thought I had logic around to do that; chown $install_dir to them so that they can write log and pid files there, and chown -R uploads to them; useradd <username> --password <whatever>
-MEVENT is getting typedef'd to int by default in the Curses code but ncurses wants to create the type.  apparently it's a mouse event.  clearing C_GETMOUSE should get rid of the offending code, maybe.  swapping order of things seems to work, too.  include'ing ncurses.h before CursesTyp.h sets C_TYPMEVENT so that it doesn't default to define'ing it as an int.
-if something fails, offer to report the output of the failed command and the config variables (except for the last part)
-add webgui to the system startup!  I think there's something like this in the WRE -- testing
+* $run_as_user never gets changed from eg root; need to offer to create a webgui user; thought I had logic around to do that; chown $install_dir to them so that they can write log and pid files there, and chown -R uploads to them; useradd <username> --password <whatever>
+* MEVENT is getting typedef'd to int by default in the Curses code but ncurses wants to create the type.  apparently it's a mouse event.  clearing C_GETMOUSE should get rid of the offending code, maybe.  swapping order of things seems to work, too.  include'ing ncurses.h before CursesTyp.h sets C_TYPMEVENT so that it doesn't default to define'ing it as an int.
 
 =cut
 
@@ -108,8 +90,6 @@ use File::Find;
 use FindBin qw($Bin);
 
 my $perl;
-
-my $mariadb_version = '10.1';
 
 #
 # some probes
@@ -1186,22 +1166,6 @@ if( $mysqld_safe_path ) {
             You'll need it to manage MySQL and to complete this setup.
             Installing these packages:  mysql-client mysql-server
         });
-
-        # per instructions at https://downloads.mariadb.org/mariadb/repositories/
-        # run( "$sudo_command apt-get install -y python-software-properties" ); 
-        # run( "$sudo_command gpg --keyserver  hkp://keyserver.ubuntu.com --recv-keys 0xcbcb082a1bb943db", input => $sudo_password, );
-        # run( "$sudo_command gpg -a --export CD2EFD2A | $sudo_command apt-key add -", input => $sudo_password, );
-
-        # if( ! `grep 'http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian' /etc/apt/sources.list` ) {
-        #     # newer versions of Debian allow this:  sudo add-apt-repository 'deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main'
-        #     cp '/etc/apt/sources.list', '/tmp/sources.list' or bail "Failed to copy /etc/apt/sources.list to /tmp: $!";
-        #     open my $fh, '>>', '/tmp/sources.list' or bail "Failed to open /tmp/sources.list for append: $!";
-        #     $fh->print("deb http://ftp.utexas.edu/mariadb/repo/$mariadb_version/debian $codename main") or bail "write to /tmp/sources.list failed: $!";
-        #     $fh->close or bail("close /tmp/sources.list failed: $!");
-        #     run( qq{ $sudo_command cp /tmp/sources.list /etc/apt/sources.list }, input => $sudo_password, );
-        # }
-
-        # run( $sudo_command . 'apt-get update', nofatal => 1, );   # needed since we've just added to the sources; don't barf if some of the apt locations are bad
 
         endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
         print "\n" x 100;
