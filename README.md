@@ -17,12 +17,26 @@ WebGUI is a mature, feature rich Content Management System.  It's written in Per
 
 ## Installation
 
-On Debian and CentOS (in development), the interactive installer script is recommended:
+On Mac OSX, Debian, and CentOS (CentOS support currently broken), the interactive installer script is recommended:
 
     cd installer
     perl webgui_installer.pl
 
 Then answer the questions about site URL, installation directory, what MySQL password to use, and so on.
+
+If the installer encounters any errors, it will offer to automatically send a problem report.  Please allow it to
+do so if this happens.
+The problem report contains several autodetected values (such as operating system and machine architecture) as well as the text
+of the fatal error message.  No user identifying information or passwords are sent.
+
+After the installer completes, a `webgui.sh` file will be left in the install directory you picked, along with the
+`WebGUI` directory containing the install.
+`webgui.sh` allows you to manually start the MySQL, nginx, and WebGUI8.
+
+If you have SysVInit, the installer will write startup files in `/etc/init.d/webgui8` and `/etc/rc4.d/S45webgui8`.
+It will also use those startup files to start WebGUI.
+If your operating system's package manager wrote startup files for nginx and MySQL, those services should be running
+and should start on boot as well.
 
 ## Manual Installation
 
