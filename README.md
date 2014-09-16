@@ -38,6 +38,16 @@ It will also use those startup files to start WebGUI.
 If your operating system's package manager wrote startup files for nginx and MySQL, those services should be running
 and should start on boot as well.
 
+These commands may be used to stop and start WebGUI8 on systems that use SysVInit:
+
+    /etc/init.d/webgui8 stop
+    /etc/init.d/webgui8 start
+
+Go to http://your.server:8081 to access the site directly, or http://your.server will work if nginx was probably 
+configured and started.
+
+The admin user is `Admin` and the default starting password is `123qwe`.
+
 ## Manual Installation
 
 For OSX, FreeBSD, and other systems, or for those who like to see exactly what is happening, use the manual install process.
