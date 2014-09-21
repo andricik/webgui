@@ -1640,44 +1640,67 @@ do {
 
     # first, fuss about nginx.conf itself
 
-    if( -f "/$nginx_etc/nginx/conf.d/default.conf" ) {
-        update "Remove the default, stock per-site nginx config file?  Don't remove it if you've made changes to it and are using it!";
-        run "rm /$nginx_etc/nginx/conf.d/default.conf";   # this is on CentOS; is it the same on Debian?  source install?
+    if( ! -d "/$nginx_etc/nginx" ) {
+        update "Huh, for some reason /$nginx_etc/nginx doesn't exist.  This is probably a bad a sign.";
+        mkdir "/$nginx_etc/nginx" or bail "Failed to create /$nginx_etc/nginx: $!";
     }
 
     if( ! -f "/$nginx_etc/nginx/nginx.conf" ) {
 
         # no main config file at all; this suggests a problem
-        bail "Failed to find nginx.conf in ``/$nginx_etc/nginx/nginx.conf''; did nginx install okay?";
+        # bail "Failed to find nginx.conf in ``/$nginx_etc/nginx/nginx.conf''; did nginx install okay?";
+        open my $fh, '>', "/$nginx_etc/nginx/nginx.conf" or bail "Failed to open /$nginx_etc/nginx/nginx.conf for write: $!";
+        $fh->print(<<EOF) or bail "Failed to write to /$nginx_etc/nginx/nginx.conf: $!";
+## This skeletal nginx.conf was written by the WebGUI8 installer script because no nginx.conf was present.
+http {
+        include /etc/nginx/conf.d/*.conf;
+}
+events {
+        worker_connections 768;
+}
+EOF
+        close $fh or bail "Failed to close /$nginx_etc/nginx/nginx.conf: $!";
 
-    } elsif(
-        ! grep_file qr{include .*/etc/nginx/conf.d/\*.conf}, "/$nginx_etc/nginx/nginx.conf" and
-        ! grep_file qr{include .*/WebGUI/etc/\*.nginx}, "/$nginx_etc/nginx/nginx.conf" 
-    ) {
+    } elsif( ! grep_file qr{include .*/etc/nginx/conf.d/\*.conf}, "/$nginx_etc/nginx/nginx.conf" ) {
 
-        # the "include /etc/nginx/conf.d/*.conf" line was *not* found; we can clobber the nginx.conf here.
+        # the "include /etc/nginx/conf.d/*.conf" line was *not* found.
         # trying to append to it.
         # once there's a line like "include /$nginx_etc/nginx/conf.d/*.conf" in the config, we can just add conf.d/webgui8.conf.
+        # we may have to create the conf.d directory in the next step, but that's okay.
+        # this scenario applies to OSX with nginx from homebrew.
 
-        update "Appending to the main nginx.conf.\nThis probably won't work.\nDanger:  Skip this step and edit yourself manually later if you don't want this!\nPress Enter to continue or 's' to skip.\n"; # XXX untested, but this applies to OSX
+        update "nginx.conf apparently doesn't include conf.d/*.conf.\nAppending to the main nginx.conf to add this.\nThis probably won't work.\nDanger:  Skip this step and edit yourself manually later if you don't want this!\nPress Enter to continue or 's' to skip.\n";
         if( $verbosity >= 0 ) {
             my $key = scankey($mwh);
             goto skip_append if $key =~ m/s/i;
         }
 
         open my $fh, '>>', "/$nginx_etc/nginx/nginx.conf" or bail "Failed to open /$nginx_etc/nginx.conf for append: $!.";
-        $fh->print("\ninclude $install_dir/WebGUI/etc/*.nginx;\n") or bail "Failed to write to /$nginx_etc/nginx.conf: $!.";
+        $fh->print(<<EOF) or bail "Failed to write to /$nginx_etc/nginx.conf: $!.";
+
+## This include was added by the WebGUI8 installer script because the nginx.conf apparently lacked it.
+
+http {
+    include /$nginx_etc/nginx/conf.d/*.conf;
+}
+EOF
         close $fh or bail "Failed to close nginx.conf: $!.";
 
       skip_append:
 
     }
 
-    # generate a conf.d/webgui.conf, which does an include [% webgui_root %]/etc/*.nginx.
+    # step 2, generate a conf.d/webgui.conf, which does an include [% webgui_root %]/etc/*.nginx.
+
+    if( -f "/$nginx_etc/nginx/conf.d/default.conf" ) {
+        # this is needed on CentOS; is it the same on Debian?  what about nginx source install?
+        update "Remove the default, stock per-site nginx config file?  It probably interferes with running any other server.  Don't remove it if you've made changes to it and are using it!  Then instead, skip this step and edit it manually.";
+        run "rm /$nginx_etc/nginx/conf.d/default.conf";
+    }
 
     if( -f "/$nginx_etc/nginx/conf.d/webgui8.conf" ) {
 
-        enter "There's already an /$nginx_etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\n";
+        update "There's already an /$nginx_etc/nginx/conf.d/webgui8.conf; not overwriting it (have I been here before?).\n";
 
     } else {
 
@@ -1689,22 +1712,22 @@ do {
         }
 
         eval { 
-            template(nginx_conf(), "/$nginx_etc/nginx/conf.d/webgui8.conf", { } )            # this exists on CentOS; is it the same on Debian?  looks like it.
+            # this directory exists on CentOS; is it the same on Debian?  looks like it.  but not on OSX/homebrew.  regardless, we now create it as necessary.
+            template(webgui8_nginx_conf(), "/$nginx_etc/nginx/conf.d/webgui8.conf", { } )
         } or bail "Failed to template webgui8.conf to /$nginx_etc/nginx/conf.d/webgui8.conf: ``$@''.";
 
     }
 
-    # set up the nginx conf file under $install_dir for the webgui site we're setting up
+    # step 3, set up the nginx conf file under $install_dir for the webgui site we're setting up
 
     update "Setting up nginx per-site config";
 
     # addsite.pl does this as a two-step process
-    # $file->copy($config->getRoot("/var/setupfiles/nginx.template"), $config->getRoot("/var/nginx.template"), { force => 1 });
-    # $file->copy($wreConfig->getRoot("/var/nginx.template"), $wreConfig->getRoot("/etc/".$sitename.".nginx"), { templateVars => $params, force => 1 });
     # we're putting $sitename.nginx in WebGUI/etc, not wre/etc; changed the main nginx.conf to match
+    # XXX this breaks compat with addsite.pl.
 
     eval { 
-        template(nginx_template(), "$install_dir/WebGUI/etc/$database_name.nginx", { } ) 
+        template(per_site_nginx_template(), "$install_dir/WebGUI/etc/$database_name.nginx", { } ) 
     } or bail "Failed to template nginx.template to $install_dir/WebGUI/etc/$database_name.nginx: ``$@''";
 
     # the per-site nginx config file does not in fact include mime.types; the main nginx.conf file does, but it has its own in /etc/nginx
@@ -1722,34 +1745,14 @@ do {
     run "nginx -t", noprompt => 1;
 
     if( $os eq 'debian' ) {
-        # XXXX
+        # XXX is nginx set to start automatically when its installed?
     } elsif( $os eq 'redhat' ) {
         run "$sudo_command /sbin/chkconfig nginx on", noprompt => 1 ;
         run "$sudo_command /sbin/service nginx start", noprompt => 1 ;
     } elsif( $os eq 'darwin' ) {
-        # XXX
+        # XXX is nginx set to start automatically?  don't think so in this case
     }
 
-};
-
-#
-# system startup files for webgui
-#
-
-do {
-    if( $os eq 'debian' ) {
-#        eval { 
-#            template(services_debian(), "/etc/rc.d/init.d/webgui8XXXX", { } ) # XXXXXXXX doesn't exist yet and certainly isn't tested
-#        } or bail "Failed to template startup file into /etc/rc.d/init.d/webgui8XXXX: $@";
-#        run "chmod ugo+x /etc/rc.d/init.d/webgui8", noprompt => 1; # XXXX
-    } elsif( $os eq 'redhat' ) {
-        eval { 
-            template(services_redhat(), "/etc/rc.d/init.d/webgui8", { } ) 
-        } or bail "Failed to template startup file into /etc/rc.d/init.d/webgui8: $@";
-        run "chmod ugo+x /etc/rc.d/init.d/webgui8", noprompt => 1;
-    } elsif( $os eq 'darwin' ) {
-        # XXX
-    }
 };
 
 progress(80);
@@ -1794,8 +1797,57 @@ do {
 progress(90);
 
 #
-# start webgui
+# system startup files for webgui
 #
+
+do {
+
+    update "Installing startup files.";
+
+    # "The univeral way of enabling SysVinit services on boot is to symlink them in /etc/rc3.d (or /etc/rc2.d). All services can be found in /etc/init.d. Note however that distros will often have their own tool for managing these files, and that tool should be used instead. (Fedora/RedHat has service and chkconfig, ubuntu has update-rc.d)"
+    # http://unix.stackexchange.com/questions/106656/how-do-services-in-debian-work-and-how-can-i-manage-them
+    # Start service: /etc/init.d/{SERVICENAME} start
+    # Enable service: cd /etc/rc3.d ln -s ../init.d/{SERVICENAME} S95{SERVICENAME}  # (the S95 is used to specify order. S01 will start before S02, etc)
+
+    if( -d '/etc/init.d' ) {
+
+        # add entry to /etc/init.d
+
+        if( -f '/etc/init.d/webgui8' ) {
+            update "/etc/init.d/webgui8 already exists.\nNot re-installing.";
+        } else {
+            open my $fh, '>', '/etc/init.d/webgui8' or bail "Failed to open /etc/init.d/webgui8 for write: $!";
+            $fh->print( template(sysvinit_webgui(), '/etc/init.d/webgui8' ) ) or bail "Failed to write to /etc/init.d/webgui8: $!";  # don't need eval; template() has its own bail calls
+            close $fh or bail "Failed to close /etc/init.d/webgui8: $!";
+            run "chmod ugo+x /etc/init.d/webgui8", noprompt => 1;
+
+        }
+
+        # add link to that from /etc/rc4.d
+
+        if( -f "/etc/rc4.d/S45webgui8" ) {
+            # just re-creating the link is easier than testing if a possibily existing link links to the right place
+            unlink "/etc/rc4.d/S45webgui8" or bail "Failed to remove existing /etc/rc4.d/S45webgui8";
+        }
+        run "ln -s /etc/init.d/webgui8 /etc/rc4.d/S45webgui8", noprompt => 1;
+
+        # start stuff up!
+
+        update "Starting up nginx and WebGUI8 through SysVInit services.";
+
+        run "/etc/init.d/nginx restart", noprompt => 1;
+        run "/etc/init.d/webgui8 stop", noprompt => 1, nofatal => 1;
+        run "/etc/init.d/webgui8 start", noprompt => 1;
+
+    } else {
+
+        enter "No /etc/init.d found.\nYou'll have to figure out how to set WebGUI8 to start on boot on your system.\nPlease tell us how you did it when you do!";
+
+    }
+
+};
+
+progress(95);
 
 do {
 
@@ -1825,16 +1877,15 @@ do {
     $verbosity = 0 if $verbosity < 0; # give people a chance to read these screens even if they had minimum verbosity set
 
     # XXX should dynamically include a list of things the user needs to manually do
-    enter( qq{
-        Installation is wrapping up.
+    enter(<<EOF);
+Installation is wrapping up.
 
-        Debian users will need to add a startup script to start WebGUI if they want it to start with the system.
-        $install_dir/webgui.sh shows how to manually launch WebGUI.
-
-        This installer wrote a config file for nginx and installed nginx, but did not add it to startup.
-
-        The spectre daemon (which handles background jobs) has not been configured.  Please consult the documentation.
-    } );
+If you have SysV init (Debian, maybe CentOS), you should be able to start WebGUI with this command:
+    /etc/init.d/webgui8 start
+Or to to manually launch WebGUI on systems without, run:
+    $install_dir/webgui.sh 
+The spectre daemon (which handles background jobs) has not been configured.  Please consult the documentation.
+EOF
 
     open my $fh, '>', "$install_dir/webgui.sh" or bail "failed to open $install_dir/webgui.sh for write: $!";
     $fh->print(<<EOF) or bail "failed to write to $install_dir/webgui.sh: $!";
@@ -1917,9 +1968,11 @@ END {
 # files needed for the wG install that aren't part of wG and don't come with it
 #
 
-sub nginx_conf {
+sub webgui8_nginx_conf {
 
-    # generates the stub nginx/conf.d/webgui8.conf that includes the etc/nginx.conf under $webgui_root
+    # generates the stub nginx/conf.d/webgui8.conf that includes the etc/$site_name.nginx under $webgui_root
+
+    # XXX would be better if both scenarios created/used a conf.d
 
     # removed from the template:
     # sendfile        on; # duplicate with /etc/nginx/nginx.conf; causes a fatal error; have to trust that it's right in /etc/nginx/nginx.conf or else check that it's right in there
@@ -1930,115 +1983,107 @@ sub nginx_conf {
     # gzip_comp_level 5;
 
     my $text = <<'EOF';
-
 ## Include per-server WebGUI vhost configuration files.
 include [% webgui_root %]/etc/*.nginx;
 EOF
-    eval {
-        template( $text, "/$nginx_etc/nginx/conf.d/webgui8.conf" )
-    } or bail "Failed to template webgui8.conf to ``$nginx_etc/nginx/conf.d/webgui8.conf'': $@.";
+
+    return $text;
+
 }
 
-sub nginx_template {
+sub per_site_nginx_template {
     <<'EOF';
+
 ##Force all domain requests, mysite.com, to go to www.mysite.com
-http {
 
-    # [% IF domain_name_has_www %]
-    # server {
-    #     server_name [% domain_sans_www %];
-    #     rewrite ^ $scheme://[% domain %]$request_uri redirect;
-    # }
-    # [% END %]
+# [% IF domain_name_has_www %]
+# server {
+#     server_name [% domain_sans_www %];
+#     rewrite ^ $scheme://[% domain %]$request_uri redirect;
+# }
+# [% END %]
 
-    server {
-        server_name [% sitename %];
-    
-        listen 80; ## listen for ipv4
-    
-        # access_log [% domainRoot %]/[% sitename %]/logs/access.log combined;
-        access_log [% log_files %]/[% sitename %].access.log combined;
-        root       [% domainRoot %]/[% sitename %]/public;
-        client_max_body_size 20M;
-    
-        # proxy webgui to starman listening on 127.0.0.1
-        location / {
-            # proxy_cache static;
-            # proxy_cache_valid 200 1s;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $remote_addr;
-            proxy_set_header Host $host;
-            proxy_pass   http://127.0.0.1:[% webgui_port %];
-        }
-    
-        location /extras/ {
-            add_header Cache-Control public;
-            expires 24h;
-            root   [% webgui_root %]/www/;
-            add_header Access-Control-Allow-Origin *;
-        }
-    
-        location /uploads/filepump { expires max; }
-        location = /default.ida    { access_log off; deny all; }
-        location /_vti_bin         { access_log off; deny all; }
-        location /_mem_bin         { access_log off; deny all; }
-        location ~ /\.(ht|wg)      { access_log off; deny all; }
-        location = /alive          { access_log off; }
+server {
+    server_name [% sitename %];
+
+    listen 80; ## listen for ipv4
+
+    # access_log [% domainRoot %]/[% sitename %]/logs/access.log combined;
+    access_log [% log_files %]/[% sitename %].access.log combined;
+    root       [% domainRoot %]/[% sitename %]/public;
+    client_max_body_size 20M;
+
+    # proxy webgui to starman listening on 127.0.0.1
+    location / {
+        # proxy_cache static;
+        # proxy_cache_valid 200 1s;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Host $host;
+        proxy_pass   http://127.0.0.1:[% webgui_port %];
     }
-    
-    #server {
-    #    listen   443;
-    #    server_name  [% sitename %] [%domain %];
-    #
-    #    ssl  on;
-    #    ssl_certificate [% domainRoot %]/[% sitename %]/certs/server.crt;
-    #    ssl_certificate_key [% domainRoot %]/[% sitename %]/certs/server.key;
-    #
-    #    ssl_session_timeout  5m;
-    #
-    #    ssl_protocols  SSLv3 TLSv1;
-    #    ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv3:+EXP;
-    #    ssl_prefer_server_ciphers   on;
-    #
-    #    access_log [% domainRoot %]/[% sitename %]/logs/access.log combined
-    #    root       [% domainRoot %]/www.example.com/public;
-    #
-    #    # proxy webgui to starman listening on 127.0.0.1
-    #    location / {
-    #        # proxy_cache static;
-    #        # proxy_cache_valid 200 1s;
-    #        proxy_set_header X-Real-IP $remote_addr;
-    #        proxy_set_header X-Forwarded-For $remote_addr;
-    #        proxy_set_header Host $host;
-    #        proxy_pass   http://127.0.0.1:[% webgui_port %];
-    #    }
-    #
-    #    location /extras/ {
-    #        add_header Cache-Control public;
-    #        expires 24h;
-    #        root   /data/WebGUI/www/extras;
-    #        add_header Access-Control-Allow-Origin *;
-    #    }
-    #
-    #    location /uploads/filepump { expires max; }
-    #    location = /default.ida    { access_log off; deny all; }
-    #    location /_vti_bin     { access_log off; deny all; }
-    #    location /_mem_bin     { access_log off; deny all; }
-    #    location ~ /\.(ht|wg)      { access_log off; deny all; }
-    #    location = /alive      { access_log off; }
-    #}
 
+    location /extras/ {
+        add_header Cache-Control public;
+        expires 24h;
+        root   [% webgui_root %]/www/;
+        add_header Access-Control-Allow-Origin *;
+    }
+
+    location /uploads/filepump { expires max; }
+    location = /default.ida    { access_log off; deny all; }
+    location /_vti_bin         { access_log off; deny all; }
+    location /_mem_bin         { access_log off; deny all; }
+    location ~ /\.(ht|wg)      { access_log off; deny all; }
+    location = /alive          { access_log off; }
 }
+
+#server {
+#    listen   443;
+#    server_name  [% sitename %] [%domain %];
+#
+#    ssl  on;
+#    ssl_certificate [% domainRoot %]/[% sitename %]/certs/server.crt;
+#    ssl_certificate_key [% domainRoot %]/[% sitename %]/certs/server.key;
+#
+#    ssl_session_timeout  5m;
+#
+#    ssl_protocols  SSLv3 TLSv1;
+#    ssl_ciphers  ALL:!ADH:!EXPORT56:RC4+RSA:+HIGH:+MEDIUM:+LOW:+SSLv3:+EXP;
+#    ssl_prefer_server_ciphers   on;
+#
+#    access_log [% domainRoot %]/[% sitename %]/logs/access.log combined
+#    root       [% domainRoot %]/www.example.com/public;
+#
+#    # proxy webgui to starman listening on 127.0.0.1
+#    location / {
+#        # proxy_cache static;
+#        # proxy_cache_valid 200 1s;
+#        proxy_set_header X-Real-IP $remote_addr;
+#        proxy_set_header X-Forwarded-For $remote_addr;
+#        proxy_set_header Host $host;
+#        proxy_pass   http://127.0.0.1:[% webgui_port %];
+#    }
+#
+#    location /extras/ {
+#        add_header Cache-Control public;
+#        expires 24h;
+#        root   /data/WebGUI/www/extras;
+#        add_header Access-Control-Allow-Origin *;
+#    }
+#
+#    location /uploads/filepump { expires max; }
+#    location = /default.ida    { access_log off; deny all; }
+#    location /_vti_bin     { access_log off; deny all; }
+#    location /_mem_bin     { access_log off; deny all; }
+#    location ~ /\.(ht|wg)      { access_log off; deny all; }
+#    location = /alive      { access_log off; }
+#}
+
 EOF
 }
 
-sub services_debian {
-    <<EOF;
-XXXXXXXXXXXXXXXX
-EOF
-}
-
-sub services_redhat {
+sub sysvinit_webgui {
     <<'EOF';
 #!/bin/bash
 # chkconfig: 2345 90 60
