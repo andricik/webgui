@@ -1152,8 +1152,8 @@ if( $mysqld_safe_path ) {
 
     # end of the scenario where we found a mysqld already installed and we just need to get the root password before we can continue
 
-    update( qq{ Deleting MySQL anonymous user. } );
-    run qq{mysql --user=root --password=$mysql_root_password -e "drop user '';" }, nofatal => 1;
+    update( qq{Deleting MySQL anonymous user.\nIt's okay if this user already doesn't exist and this fails.} );
+    run qq{mysql --user=root --password='$mysql_root_password' -e "drop user '';" }, nofatal => 1, noprompt => 1;
 
 } else {
 
