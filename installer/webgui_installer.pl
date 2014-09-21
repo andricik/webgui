@@ -1268,6 +1268,8 @@ progress(20);
 
 my $mysql_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
 
+my $skip_database_load = 0;
+
 do {
     # XXX hard-coded database user name to 'webgui' for now and user has no say in what the password is
     # my $database_already_exists = run qq{mysql --password=$mysql_root_password --user=root --batch --disable-column-names -e "select count(*) from mysql.db where Db='$database_name'"}, noprompt => 1; # can't find the table that has this.  mysql.db continues to remember the user/database even after the database is dropped.  http://dev.mysql.com/doc/refman/5.0/en/tables-table.html
@@ -1275,9 +1277,28 @@ do {
     chomp $database_already_exists_output;
 
     if( $database_already_exists_output eq $database_name ) {
-        enter(qq{Database '$database_name' already exists.\nIf the database load from create.sql step has already completed, you must later on in the install process opt to skip that step.\nOtherwise, trying to load it again will error out.\nHit Control-C if there is anything on an existing WebGUI install you want!\n});
-        # XXX if the database already exists, the user must skip the create.sql load step or else it will fail.
-        # XXX we could be more robust here and offer to drop the database and create it again.
+
+        # are there actually tables in there?
+
+        my $number_of_tables = run qq{mysql --password='$mysql_root_password' --user=root --batch --disable-column-names -e "select count(*) from information_schema.TABLES where TABLE_SCHEMA='$database_name'"}, noprompt => 1;
+        chomp $number_of_tables;
+
+        if( $number_of_tables > 0 ) {
+
+            # XXX kind of a bad test; we should be detecting the > 0 but fewer than reasonable number of tables in the database scenario
+            # XXX we could be more robust here and offer to drop the database and create it again.
+
+            $number_of_tables < 180 and bail "There should be about 183 tables in the database, or else 0 if we haven't loaded them yet, but there are $number_of_tables.  Did the database load get interrupted part way through?  Please drop the database if so and run the installer again.";
+
+            $skip_database_load = 1;
+            enter "The ``$database_name'' database exists and appears to contain tables.\nNot reloading the database.\nIf this is incorrect, hit control-C and then drop that database.";
+
+        } else {
+        
+            enter qq{Database '$database_name' already exists but does not appear to contain tables.\nThe initial database will be loaded.\nIf this is incorrect, hit control-C and seek help.\n};
+
+        }
+
     } else {
         update(qq{Creating database.});
         run( qq{mysql --password=$mysql_root_password --user=root -e "create database $database_name"} );
@@ -1537,15 +1558,17 @@ progress(65);
 # create database and load create.sql
 #
 
-do {
+if( ! $skip_database_load ) {
     update( qq{
         Loading the initial WebGUI database.
         This contains configuration, table structure for all of the tables, definitions for the default assets, and other stuff.
         Skip this step if you've already done it or else it will error out.
-    } );
+    }, noprompt => 1, );
     # the user currently needs to be able to skip this step if it was already done, as the create.sql doesn't contain drop table statements
     run( qq{ mysql --password=$mysql_user_password --user=webgui $database_name < WebGUI/share/create.sql }, );
-};
+} else {
+    update "Not loading the database as it seems to already be there.\n";
+}
 
 #
 # WebGUI config files
