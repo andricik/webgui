@@ -5,10 +5,14 @@ echo "Hit enter to nuke everything."
 read line
 
 rm -rf /data
+rm -rf /etc/nginx
 rm -f /etc/nginx/conf.d/webgui8.conf
+rm -f /usr/local/etc/nginx/conf.d/webgui8.conf
 rm -f /etc/rc.d/*/*webgui8
+rm -f /data/WebGUI/etc/*.nginx
 rm -rf /tmp/WebGUICache
 killall starman
-mysql --user=root --password=Nyklm6 -e 'drop database www_example_com;'
+# mysql --user=root --password=Nyklm6 -e 'drop database www_example_com;'
+rm -rf /var/lib/mysql
 apt-get remove akonadi-backend-mysql  libdbd-mysql-perl libmysqlclient18:amd64 mysql-client-5.5 mysql-common mysql-server-core-5.5
 
