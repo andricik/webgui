@@ -1174,12 +1174,7 @@ if( $mysqld_safe_path ) {
         print "\n" x 100;
         # system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
 
-        run("$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, );
-
-        if( $verbosity >= 0 ) {
-           print "Press enter to continue...\n";
-           readline(STDIN);
-        }
+        run("$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, noprompt => 1, );
 
         init_curses(); # $mwh = Curses->new; # re-init the screen (echo off, etc)
         main_win();  update();    # redraw
@@ -1306,7 +1301,7 @@ do {
 
             # run( $sudo_command . 'apt-get update', noprompt => 1, );
  # XXXX yes, but are we installing perlmagick for the *correct* perl install?  not if they built their own perl.  regardless, that should get the deps installed so that cpanm can build Image::Magick as well.
-            run( "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx" );
+            run "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
 
         } elsif( $os eq 'redhat' ) {
 
@@ -1486,7 +1481,7 @@ do {
         run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
     }
 
-    my $test_environment_output = run "$perl WebGUI/sbin/testEnvironment.pl --noprompt --simpleReport", nofatal => 1;  # it's okay if it finds things not installed because we're installing them
+    my $test_environment_output = run "$perl WebGUI/sbin/testEnvironment.pl --noprompt --simpleReport", nofatal => 1, noprompt => 1;  # it's okay if it finds things not installed because we're installing them; also some things just won't install and we have to do our best
     # eg: Checking for module Weather::Com::Finder:         OK
     my @results = grep m/Checking for module/, split m/\n/, $test_environment_output;
     for my $result ( @results ) {
@@ -1762,12 +1757,12 @@ do {
         However, a new config file and database dump are not included in each release, so upgrades 
         are necessary even for brand new installs.
     } );
-    # run "$perl WebGUI/sbin/wgd reset --upgrade", noprompt => 1,;  # XXX testing... want to watch the output of this... thought there were a lot more upgrades!
     if( $run_as_user eq 'root' ) {    # XXX this assumes that the installer is being run as root, which may not be the case
-        run "$perl WebGUI/sbin/wgd reset --upgrade";
+        run "$perl WebGUI/sbin/wgd reset --upgrade  --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
     } else {
         # run upgrades as the user wG is going to run as so that log files, uploads, etc are all owned by that user
-        run "sudo -u $run_as_user $perl WebGUI/sbin/wgd reset --upgrade --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI";
+        # this is the normal case and the scenario that this installer sets up
+        run "sudo -u $run_as_user $perl WebGUI/sbin/wgd reset --upgrade --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
     }
 
 
