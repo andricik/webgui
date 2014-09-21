@@ -173,7 +173,7 @@ BEGIN {
          goto skip_update if readline(STDIN) =~ m/s/;
          system $cmd;
        skip_update:
-         $cmd = "$sudo apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl";
+         $cmd = "$sudo apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig";
 
     } elsif( $os eq 'redhat' ) {
 
@@ -860,11 +860,11 @@ do {
         run( "mkdir -p '$install_dir'", noprompt => 1 );
     }
     chdir $install_dir or bail "Couldn't chdir to the install_dir $install_dir";
-    if( -d "$install_dir/WebGUI" ) {
-        update(qq{The $install_dir/WebGUI directory already exists.\nTHIS SCRIPT DOES NOT UPGRADE OR ADD SITES, ONLY INSTALL.\nIt will erase all of your data.\nDo you wish to continue? [Y/N]});
-        exit unless scankey($mwh) =~ m/^y/i;
-        # rename 'WebGUI', "WebGUI.$$.bak";  # no, assume that an install is in progress, and the WebGUI directory contains the extracted files
-    }
+    # if( -d "$install_dir/WebGUI" ) {
+    #     update(qq{The $install_dir/WebGUI directory already exists.\nTHIS SCRIPT DOES NOT UPGRADE OR ADD SITES, ONLY INSTALL.\nIt will erase all of your data.\nDo you wish to continue? [Y/N]});
+    #     exit unless scankey($mwh) =~ m/^y/i;
+    #     # rename 'WebGUI', "WebGUI.$$.bak";  # no, assume that an install is in progress, and the WebGUI directory contains the extracted files
+    # }
     $ENV{PERL5LIB} .= ":$install_dir/WebGUI/lib:$install_dir/extlib/lib/perl5";
     $ENV{WEBGUI_ROOT} = "$install_dir/WebGUI";
     $ENV{WEBGUI_CONFIG} = "$install_dir/WebGUI/etc/$database_name.conf";
@@ -1295,7 +1295,8 @@ do {
 
         } else {
         
-            enter qq{Database '$database_name' already exists but does not appear to contain tables.\nThe initial database will be loaded.\nIf this is incorrect, hit control-C and seek help.\n};
+            # enter qq{Database '$database_name' already exists but does not appear to contain tables.\nThe initial database will be loaded.\nIf this is incorrect, hit control-C and seek help.\n};
+            update qq{Database '$database_name' already exists but does not appear to contain tables.\nThe initial database will be loaded.\n};
 
         }
 
@@ -1562,10 +1563,8 @@ if( ! $skip_database_load ) {
     update( qq{
         Loading the initial WebGUI database.
         This contains configuration, table structure for all of the tables, definitions for the default assets, and other stuff.
-        Skip this step if you've already done it or else it will error out.
-    }, noprompt => 1, );
-    # the user currently needs to be able to skip this step if it was already done, as the create.sql doesn't contain drop table statements
-    run( qq{ mysql --password=$mysql_user_password --user=webgui $database_name < WebGUI/share/create.sql }, );
+    }, );
+    run( qq{ mysql --password=$mysql_user_password --user=webgui $database_name < WebGUI/share/create.sql }, noprompt => 1, );
 } else {
     update "Not loading the database as it seems to already be there.\n";
 }
@@ -1610,8 +1609,9 @@ do {
     # create webroot
     update qq{Creating site directory structure under $install_dir/domains/$site_name... };
     if( -d "$install_dir/domains"  ) {
-        update(qq{The $install_dir/domain directory already exists.\nDo you wish to continue? [Y/N]});
-        exit unless scankey($mwh) =~ m/^y/i;
+        # update(qq{The $install_dir/domain directory already exists.\nDo you wish to continue? [Y/N]});
+        # exit unless scankey($mwh) =~ m/^y/i;
+        update qq{The $install_dir/domain directory already exists.};
     } else {
         mkdir "$install_dir/domains" or bail "Couldn't create $install_dir/domains: $!";
         mkdir "$install_dir/domains/$site_name" or bail "Couldn't create $install_dir/domains/$site_name: $!";
@@ -1816,22 +1816,23 @@ do {
         if( -f '/etc/init.d/webgui8' ) {
             update "/etc/init.d/webgui8 already exists.\nNot re-installing.";
         } else {
-            open my $fh, '>', '/etc/init.d/webgui8' or bail "Failed to open /etc/init.d/webgui8 for write: $!";
-            $fh->print( template(sysvinit_webgui(), '/etc/init.d/webgui8' ) ) or bail "Failed to write to /etc/init.d/webgui8: $!";  # don't need eval; template() has its own bail calls
-            close $fh or bail "Failed to close /etc/init.d/webgui8: $!";
+            template(sysvinit_webgui(), '/etc/init.d/webgui8' ) or bail "Failed to write to /etc/init.d/webgui8: $!";  # don't need eval; template() has its own bail calls
             run "chmod ugo+x /etc/init.d/webgui8", noprompt => 1;
 
         }
 
         # add link to that from /etc/rc4.d
 
-        if( -f "/etc/rc4.d/S45webgui8" ) {
-            # just re-creating the link is easier than testing if a possibily existing link links to the right place
-            unlink "/etc/rc4.d/S45webgui8" or bail "Failed to remove existing /etc/rc4.d/S45webgui8";
-        }
-        run "ln -s /etc/init.d/webgui8 /etc/rc4.d/S45webgui8", noprompt => 1;
+        # if( -f "/etc/rc4.d/S45webgui8" ) {
+        #     # just re-creating the link is easier than testing if a possibily existing link links to the right place
+        #     unlink "/etc/rc4.d/S45webgui8" or bail "Failed to remove existing /etc/rc4.d/S45webgui8";
+        # }
+        # run "ln -s /etc/init.d/webgui8 /etc/rc4.d/S45webgui8", noprompt => 1;
+        # apparently, you're supposed to use tools to do this
 
         # start stuff up!
+
+        run "chkconfig --add webgui8", noprompt => 1;
 
         update "Starting up nginx and WebGUI8 through SysVInit services.";
 
@@ -2086,9 +2087,17 @@ EOF
 sub sysvinit_webgui {
     <<'EOF';
 #!/bin/bash
-# chkconfig: 2345 90 60
 # description: Start and stop WebGUI (non-WRE) plack-based service
 # processname: webgui
+# chkconfig: 45 45 45
+### BEGIN INIT INFO
+# Provides:          webgui8
+# Required-Start:    $local_fs mysql      
+# Required-Stop:     $local_fs
+# Default-Start:     4 5
+# Default-Stop:      0 1 2 3 6
+# Short-Description: webgui8
+### END INIT INFO
 
 export PERL5LIB="$PERL5LIB:[% webgui_root %]/lib"
 export PATH="$PATH:/usr/local/bin"  # starman gets installed into here
