@@ -42,6 +42,9 @@ xdanger
 
 todo:
 
+* need a notice() method that calls update() and does the same thing as enter() if verbosity is max; various warnings are currently given via update but there's no pause
+* need a sql() function as a wrapper around run for running instances of this:
+        my $number_of_tables = run qq{mysql --password='$mysql_root_password' --user=root --batch --disable-column-names -e "select count(*) from information_schema.TABLES where TABLE_SCHEMA='$database_name'"}, noprompt => 1;
 * we need something like run() but that takes a closure instead of shell commands.
 * configuring mysql with a blank password in Debian doesn't seem to work
 * in curses installer, sudo password is echoed in plaintext and remains on screen during installation, one user reports.
