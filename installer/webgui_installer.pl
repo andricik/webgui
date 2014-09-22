@@ -1847,15 +1847,8 @@ do {
         # run "ln -s /etc/init.d/webgui8 /etc/rc4.d/S45webgui8", noprompt => 1;
         # apparently, you're supposed to use tools to do this
 
-        # start stuff up!
-
         run "chkconfig --add webgui8", noprompt => 1;
-
-        update "Starting up nginx and WebGUI8 through SysVInit services.";
-
-        run "/etc/init.d/nginx restart", noprompt => 1;
-        run "/etc/init.d/webgui8 stop", noprompt => 1, nofatal => 1;
-        run "/etc/init.d/webgui8 start", noprompt => 1;
+        run "chkconfig webgui8 on", noprompt => 1 ;
 
     } else {
 
@@ -1871,15 +1864,32 @@ do {
 
     update "Fixing log file permissions";    
 
-    run "touch $log_files/webgui.log", noprompt => 1;
+    run "touch $log_files/webgui.log $log_files/access.log $log_files/error.log", noprompt => 1;
     run "chown $run_as_user $log_files/*.log", noprompt => 1;
 
-    if( $os eq 'debian' ) {
-        # XXX
-    } elsif( $os eq 'redhat' ) {
+};
+
+progress(96);
+
+# start server processes
+
+do {
+
+    # if( $os eq 'debian' ) {
+    # } elsif( $os eq 'redhat' ) {
+    # }
+
+    if( -d '/etc/init.d' ) {
+
         update "Attempting to start the WebGUI server process...\n";
-        run "$sudo_command /sbin/chkconfig webgui8 on", noprompt => 1 ;
-        run "$sudo_command /sbin/service webgui8 start", noprompt => 1, background => 1 ; # XXX working around this process going zombie
+
+        # run "$sudo_command /sbin/service webgui8 start", noprompt => 1, background => 1 ; # working around this process going zombie
+
+        run "/etc/init.d/mysql start", noprompt => 1;
+        run "/etc/init.d/nginx restart", noprompt => 1;
+        run "/etc/init.d/webgui8 stop", noprompt => 1, nofatal => 1;
+        run "/etc/init.d/webgui8 start", noprompt => 1, background => 1; # working around the /etc/init.d/webgui8 script going zombie when run from here
+
     } elsif( $os eq 'darwin' ) {
         # XXX
     }
@@ -1910,7 +1920,10 @@ EOF
 $mysqld_safe_path &
 nginx &
 cd $install_dir/WebGUI
+export PATH="$install_dir/WebGUI/sbin:\$PATH"
 export PERL5LIB="\$PERL5LIB:$install_dir/WebGUI/lib"
+export WEBGUI_ROOT="$install_dir/WebGUI"
+# export WEBGUI_CONFIG="$install_dir/WebGUI/etc/$database_name.conf" # app.psgi iterates over all of the site configs
 plackup --port $webgui_port app.psgi &
 EOF
     close $fh or bail "failed to close handle to $install_dir/webgui.sh: $!";
@@ -2117,15 +2130,17 @@ sub sysvinit_webgui {
 ### END INIT INFO
 
 export PERL5LIB="$PERL5LIB:[% webgui_root %]/lib"
-export PATH="$PATH:/usr/local/bin"  # starman gets installed into here
+export PATH="[% install_dir %]/WebGUI/sbin:$PATH:/usr/local/bin"  # starman gets installed to /usr/local/bin
+export PERL5LIB="$PERL5LIB:[% install_dir %]/WebGUI/lib"
+export WEBGUI_ROOT="[% install_dir %]/WebGUI"
+# export WEBGUI_CONFIG="[% install_dir %]/WebGUI/etc/[% database_name %].conf" # app.psgi iterates over all of the site configs
 
 # See how we were called.
 case "$1" in
   	start)
-        # sdw:  I'm having a problem where the 'service' program goes zombie waiting for this to properly daemonize; XXX fix this
-        # nophup ... > [% log_files %]/starman.startup.log # didn't fix it
         cd [% webgui_root %]
-   		starman  --pid=[% pid_files %]/webgui.pid --quiet --port=[% webgui_port %] --preload-app --access-log=[% log_files %]/access_log --error-log=[% log_files %]/error_log --user=[% run_as_user %] --daemonize
+   		# starman  --pid=[% pid_files %]/webgui.pid --quiet --port=[% webgui_port %] --preload-app --access-log=[% log_files %]/access.log --error-log=[% log_files %]/error.log --user=[% run_as_user %] --daemonize
+   		starman  --pid=[% pid_files %]/webgui.pid --port=[% webgui_port %] --preload-app --access-log=[% log_files %]/access.log --error-log=[% log_files %]/error.log --user=[% run_as_user %] --daemonize
     	;;
   	stop)
     		kill `cat [% pid_files %]/webgui.pid`
