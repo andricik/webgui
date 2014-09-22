@@ -126,7 +126,20 @@ my $thirtytwo;
 
 my $nginx_etc;
 
+my $verbosity = 1;
+
+my $unattended = 0;
+
+my $install_dir;
+
 BEGIN {
+
+    # detect unattended mode before asking any questions
+
+    if( grep $_ eq '--unattended', @ARGV ) {
+        $verbosity = 0; 
+        $unattended = 1;
+    }
 
     # early bootstrapping
 
@@ -146,7 +159,7 @@ BEGIN {
     # only applicable to Linux
 
     if( $os eq 'linux' ) {
-        $sixtyfour = $Config{archname} =~ m/x86_64/ ? '64' : ''; # XXXXXXX use these everywhere apt-get gets run
+        $sixtyfour = $Config{archname} =~ m/x86_64/ ? '64' : ''; # XXX use these everywhere apt-get gets run
         $thirtytwo = $Config{archname} =~ m/i686/ ? '32' : '';
     
         $cpu = $Config{archname};
@@ -161,6 +174,12 @@ BEGIN {
     chomp $sudo;
 
     $root or die "Non-root installations aren't currently supported.  Sorry.  Feel free to add the feature and share the code if you're able to!"; # XXX
+
+    # default install dir
+
+    $install_dir = $root ? '/data' : "$ENV{HOME}/webgui";
+
+    # system packages needed to bring up courses and maybe a few other things
 
     print "WebGUI8 installer bootstrap:  Installing stuff before we install stuff...\n\n";
     my $cmd;
@@ -213,81 +232,79 @@ BEGIN {
         system $cmd unless readline(STDIN) =~ m/s/;
     }
 
-    # extract the uuencoded, tar-gzd attachments
-
-    do {
-        # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
-        # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
-        # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
-        my $fn = __FILE__;
-        $fn = "$Bin/$fn" if $fn !~ m{^/};
-        open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
-        # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
-        while( my $line = readline $data ) {
-            chomp $line;
-            last if $line =~ m/^__DATA__$/;
-        }
-        die if eof $data;
-        while( my $line = readline $data ) {
-            chomp $line;
-            next unless my ($mode, $file) = $line =~ m/^begin\s+(\d+)\s+(\S+)/;
-            open my $fh, '>', $file	or die "can't create $file: $!";
+    if( ! $unattended ) {
+    
+        # extract the uuencoded, tar-gzd attachments
+    
+        do {
+            # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
+            # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
+            # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
+            my $fn = __FILE__;
+            $fn = "$Bin/$fn" if $fn !~ m{^/};
+            open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
+            # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
             while( my $line = readline $data ) {
                 chomp $line;
-                last if $line =~ m/^end/;
-                $line = unpack 'u', $line;
-                next unless defined $line and length $line;
-                $fh->print($line) or die $! if length $line;
+                last if $line =~ m/^__DATA__$/;
             }
-        }
-    };
-
-    # attempt to load Curses and Curses::Widget or go with the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
-
-    eval { require Curses; require Curses::Widgets; } or do {
-        `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
-
-        if( ! $root ) {
-            # this is a failed attempt at dealing with lack of root permission to install perl modules
-            # add to the library path before, so that after Curses is installed, Curses::Widgets can find it during build
-            my $v = '' . $^V;
-            $v =~ s{^v}{};
-            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/${sixtyfour}${thirtytwo}-linux/"; };# Curses.pm in there
-            eval qq{ use lib "/tmp/lib/perl5/"; };# no, Curses.pm is in here!
-            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/"; };  # Curses/Widgets.pm in there
-            eval qq{ use lib "/tmp/lib/perl5/auto/"; };  # no, Curses/Widgets.pm goes in there!  no, it doesn't even... sigh
-        }
-
-        for my $filen ( 'Curses-1.28.modified.tar.gz', 'CursesWidgets-1.997.tar.gz' ) {
-            my $file = $filen;
-            system 'tar', '-xzf', $file and die $@;
-            $file =~ s{\.tar\.gz$}{};
-            $file =~ s{\.modified}{};
-            chdir $file or die $!;
-            die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
-            # XXX would be better to test -w on the perl lib dir; might be a private perl install
+            die if eof $data;
+            while( my $line = readline $data ) {
+                chomp $line;
+                next unless my ($mode, $file) = $line =~ m/^begin\s+(\d+)\s+(\S+)/;
+                open my $fh, '>', $file	or die "can't create $file: $!";
+                while( my $line = readline $data ) {
+                    chomp $line;
+                    last if $line =~ m/^end/;
+                    $line = unpack 'u', $line;
+                    next unless defined $line and length $line;
+                    $fh->print($line) or die $! if length $line;
+                }
+            }
+        };
+    
+        # attempt to load Curses and Curses::Widget or go with the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
+    
+        eval { require Curses; require Curses::Widgets; } or do {
+            `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
+    
             if( ! $root ) {
-                system $perl, 'Makefile.PL', 'PREFIX=/tmp';
-            } else {
-                system $perl, 'Makefile.PL';
+                # this is a failed attempt at dealing with lack of root permission to install perl modules
+                # add to the library path before, so that after Curses is installed, Curses::Widgets can find it during build
+                my $v = '' . $^V;
+                $v =~ s{^v}{};
+                eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/${sixtyfour}${thirtytwo}-linux/"; };# Curses.pm in there
+                eval qq{ use lib "/tmp/lib/perl5/"; };# no, Curses.pm is in here!
+                eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/"; };  # Curses/Widgets.pm in there
+                eval qq{ use lib "/tmp/lib/perl5/auto/"; };  # no, Curses/Widgets.pm goes in there!  no, it doesn't even... sigh
             }
-            system 'make' and die $@;
-            system 'make', 'install' and die $@;
-            chdir '..' or die $!;
-        }
-        # find all of the directories in /tmp and add them to the start of @INC
-        # XXX this is miserable
-        # XXX if there's a .pm in there, such as in Config/JSON.pm, and we add the Config dir, trying load JSON will load the JSON from Config::JSON and things will blow up
-        # XXX need some heuristic to deal with that -- look at the package line of stuff in the module and don't load it if has a :: in it?  look for a VERSION string and don't add the dir if it doesn't have one?
-        # XXX alternatively, just hard-code where Curses and Curses::Widgets get installed at.  argh.
-        #File::Find::find(
-        #    sub {
-        #        # unshift so we find our new crud before anything already installed
-        #        unshift @INC, $File::Find::name if -d $_;
-        #    },
-        #    '/tmp',
-        #);
-    };
+    
+            for my $filen ( 'Curses-1.28.modified.tar.gz', 'CursesWidgets-1.997.tar.gz' ) {
+                my $file = $filen;
+                system 'tar', '-xzf', $file and die $@;
+                $file =~ s{\.tar\.gz$}{};
+                $file =~ s{\.modified}{};
+                chdir $file or die $!;
+                die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
+                # XXX would be better to test -w on the perl lib dir; might be a private perl install
+                if( ! $root ) {
+                    system $perl, 'Makefile.PL', 'PREFIX=/tmp';
+                } else {
+                    system $perl, 'Makefile.PL';
+                }
+                system 'make' and die $@;
+                system 'make', 'install' and die $@;
+                chdir '..' or die $!;
+            }
+        };
+
+    } else {
+
+        *endwin = sub { };
+        *text = sub { $_[1] }; # just return the default option
+
+    }  # end if ! $unattended
+
 }
 
 # use lib '/tmp/lib/perl5/site_perl'; # doesn't wind up in any constant place... grr!
@@ -321,13 +338,11 @@ use FileHandle;
 #
 #
 
-my $verbosity = 1;
-
-#
-
 my $mwh;
 
 sub init_curses {
+
+    return if $unattended;
 
     $mwh = Curses->new;
 
@@ -344,29 +359,34 @@ init_curses();
 
 sub main_win {
 
-  # main window
+    # main window
 
-  $mwh->erase();
+    return if $unattended;
 
-  # This function selects a few common colours for the foreground colour
-  $mwh->attrset(COLOR_PAIR(select_colour(qw(white black))));
-  $mwh->box(ACS_VLINE, ACS_HLINE);
-  $mwh->attrset(0);
+    $mwh->erase();
 
-  $mwh->standout();
-  $mwh->addstr(0, 1, "WebGUI8");
-  $mwh->standend();
+    # This function selects a few common colours for the foreground colour
+    $mwh->attrset(COLOR_PAIR(select_colour(qw(white black))));
+    $mwh->box(ACS_VLINE, ACS_HLINE);
+    $mwh->attrset(0);
+
+    $mwh->standout();
+    $mwh->addstr(0, 1, "WebGUI8");
+    $mwh->standend();
 
 }
 
 main_win();
 
+#
+# curses UI
+#
 
-#
 # comment box and progress bar is always on the screen but never in focus
-#
 
 my $progress = do {
+
+    return if $unattended;
 
     my ($y, $x);
     $mwh->getmaxyx($y, $x);
@@ -389,8 +409,11 @@ my $progress = do {
 my $comment_box_width;
 
 my $comment = do {
+
+    return if $unattended;
+
     my ($y, $x);
-  
+
     # Get the main screen max y & X
     $mwh->getmaxyx($y, $x);
     $comment_box_width = $x - 2;
@@ -408,12 +431,12 @@ my $comment = do {
     });
 };
 
-#
-#
-#
-
 sub update {
     my $message = shift() || '';
+    if( $unattended ) {
+        print $message;
+        return;
+    }
     $message =~ s{^\n}{};
     $message =~ s{^ +}{};
     $message =~ s{\n  +}{\n}g;
@@ -423,6 +446,7 @@ sub update {
 }
 
 sub progress {
+    return if $unattended;
     my $percent = shift;
     # $progress->input($hop) if $hop;
     $progress->setField( VALUE => $percent ) if $percent; 
@@ -441,22 +465,25 @@ sub bail {
     my $message = shift;
     enter($message);
     update( "May I please post this message to http://slowass.net/~scott/wginstallerbug.cgi?\nDoing so may help get bugs fixed and problems worked around in future versions." );
-    my $feedback_dialogue = Curses::Widgets::ListBox->new({
-         Y           => 2,
-         X           => 38,
-         COLUMNS     => 20,
-         LISTITEMS   => ['Yes', 'No'],
-         VALUE       => 0,
-         SELECTEDCOL => 'white',
-         CAPTION     => 'Send Feedback?',
-         CAPTIONCOL  => 'white',
-         FOCUSSWITCH => "\t\n",
-    });
-    $feedback_dialogue->draw($mwh);
-    $feedback_dialogue->execute($mwh);
-    my $feedback = $feedback_dialogue->getField('CURSORPOS');
-    main_win();  # erase the dialogue
-    update();    # redraw after erasing the text dialogue
+    my $feedback = 0;
+    if( ! $unattended ) {
+        my $feedback_dialogue = Curses::Widgets::ListBox->new({
+             Y           => 2,
+             X           => 38,
+             COLUMNS     => 20,
+             LISTITEMS   => ['Yes', 'No'],
+             VALUE       => 0,
+             SELECTEDCOL => 'white',
+             CAPTION     => 'Send Feedback?',
+             CAPTIONCOL  => 'white',
+             FOCUSSWITCH => "\t\n",
+        });
+        $feedback_dialogue->draw($mwh);
+        $feedback_dialogue->execute($mwh);
+        $feedback = $feedback_dialogue->getField('CURSORPOS');
+        main_win();  # erase the dialogue
+        update();    # redraw after erasing the text dialogue
+    }
     if( $feedback == 0 ) {
         use Socket; 
         socket my $s, 2, 1, 6 or die $!;
@@ -849,28 +876,28 @@ do {
 # /data directory
 #
 
-my $install_dir = $root ? '/data' : "$ENV{HOME}/webgui";
-
 pick_install_directory:
 
 do {
   where_to_install:
-    $install_dir = text("Install Directory", $install_dir);
-    update(qq{
-        Where do you want to install WebGUI8?
-        Please enter an absolute path name (starting with a /).
-        The git repository will be checked out into a 'WebGUI' directory inside of there.
-        The configuration files will be placed inside of 'WebGUI/etc' in there.
-        Static and uploaded files for your site will be kept under in a 'domains' directory in there.
-        Traditionally, WebGUI has lived inside of the '/data' directory, but this is not necessary.
-    });
-    if( $verbosity >= 1 && ! -d $install_dir ) {
+    if( $verbosity >= 0 ) {
+        $install_dir = text("Install Directory", $install_dir);
         update(qq{
-            Create directory '$install_dir' to hold WebGUI?  [Y/N]
+            Where do you want to install WebGUI8?
+            Please enter an absolute path name (starting with a /).
+            The git repository will be checked out into a 'WebGUI' directory inside of there.
+            The configuration files will be placed inside of 'WebGUI/etc' in there.
+            Static and uploaded files for your site will be kept under in a 'domains' directory in there.
+            Traditionally, WebGUI has lived inside of the '/data' directory, but this is not necessary.
         });
-        goto where_to_install unless scankey($mwh) =~ m/^y/i;
+        if( $verbosity >= 1 && ! -d $install_dir ) {
+            update(qq{
+                Create directory '$install_dir' to hold WebGUI?  [Y/N]
+            });
+            goto where_to_install unless scankey($mwh) =~ m/^y/i;
+        }
+        main_win();  update();    # redraw
     }
-    main_win();  update();    # redraw
     if( ! -d $install_dir ) {
         update( qq{Creating directory '$install_dir'.\n} );
         run( "mkdir -p '$install_dir'", noprompt => 1 );
@@ -891,6 +918,8 @@ progress(5);
 #
 # sudo password
 #
+
+# sudo installs don't currently work
 
 my $sudo_password = '';
 my $sudo_command = '';
@@ -978,38 +1007,41 @@ if( $run_as_user eq 'root' ) {
         my $new_user_password;
 
       ask_about_making_a_new_user:
-        update "Create a user to run the WebGUI server process as?";
-        my $dialogue = Curses::Widgets::ListBox->new({
-             Y           => 2,
-             X           => 38,
-             COLUMNS     => 20,
-             LISTITEMS   => ['Yes', 'No'],
-             VALUE       => 'webgui',
-             SELECTEDCOL => 'white',
-             CAPTION     => 'Create a user?',
-             CAPTIONCOL  => 'white',
-             FOCUSSWITCH => "\t\n",
-        });
-        if( $verbosity >= 1 ) {
-            $dialogue->draw($mwh);
-            $dialogue->execute($mwh);
-            main_win();  # erase the dialogue
-            update();    # redraw after erasing the text dialogue
-        } else {
-            # for low or super low verbosity, assume yes
-            $dialogue->setField('CURSORPOS', 0);
-        }
-        if( $dialogue->getField('CURSORPOS') == 0 ) {
-          ask_what_username_to_use_for_the_new_user:
-            $run_as_user = text('New Username', '') or goto ask_about_making_a_new_user;
-            if( $run_as_user =~ m/[^a-z0-9_]/ ) {
-                update "Create a new user to run the WebGUI server process as?\nUsername must be numbers, letters, and underscore, and should be lowercase.";
-                goto ask_what_username_to_use_for_the_new_user;
+        if( $verbosity >= 0 ) {
+            update "Create a user to run the WebGUI server process as?";
+            my $dialogue = Curses::Widgets::ListBox->new({
+                 Y           => 2,
+                 X           => 38,
+                 COLUMNS     => 20,
+                 LISTITEMS   => ['Yes', 'No'],
+                 VALUE       => 'webgui',
+                 SELECTEDCOL => 'white',
+                 CAPTION     => 'Create a user?',
+                 CAPTIONCOL  => 'white',
+                 FOCUSSWITCH => "\t\n",
+            });
+            if( $verbosity >= 1 ) {
+                $dialogue->draw($mwh);
+                $dialogue->execute($mwh);
+                main_win();  # erase the dialogue
+                update();    # redraw after erasing the text dialogue
+            } else {
+                # for low or super low verbosity, assume yes
+                $dialogue->setField('CURSORPOS', 0);
             }
-            my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
-
+            if( $dialogue->getField('CURSORPOS') == 0 ) {
+              ask_what_username_to_use_for_the_new_user:
+                $run_as_user = text('New Username', '') or goto ask_about_making_a_new_user;
+                if( $run_as_user =~ m/[^a-z0-9_]/ ) {
+                    update "Create a new user to run the WebGUI server process as?\nUsername must be numbers, letters, and underscore, and should be lowercase.";
+                    goto ask_what_username_to_use_for_the_new_user;
+                }
+    
+            }
         }
 
+        my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
+    
         if( $os eq 'redhat' ) {
     
             run "useradd $run_as_user --password $new_user_password --shell /bin/bash";  # on Debian, it defaults to dash if we don't specify bash
@@ -1902,10 +1934,10 @@ do {
 do {
     #run webgui. -- For faster server install "cpanm -L extlib Starman" and add " -s Starman --workers 10 --disable-keepalive" to plackup command
 
-    $verbosity = 0 if $verbosity < 0; # give people a chance to read these screens even if they had minimum verbosity set
+    # $verbosity = 0 if $verbosity < 0; # give people a chance to read these screens even if they had minimum verbosity set; nope, display it all on exit
 
     # XXX should dynamically include a list of things the user needs to manually do
-    enter(<<EOF);
+    my $text1 = <<EOF;
 Installation is wrapping up.
 
 If you have SysV init (Debian, maybe CentOS), you should be able to start WebGUI with this command:
@@ -1914,6 +1946,7 @@ Or to to manually launch WebGUI on systems without, run:
     $install_dir/webgui.sh 
 The spectre daemon (which handles background jobs) has not been configured.  Please consult the documentation.
 EOF
+    enter($text1);
 
     open my $fh, '>', "$install_dir/webgui.sh" or bail "failed to open $install_dir/webgui.sh for write: $!";
     $fh->print(<<EOF) or bail "failed to write to $install_dir/webgui.sh: $!";
@@ -1935,18 +1968,18 @@ EOF
     #    export PERL5LIB="/$install_dir/WebGUI/lib"
     #    plackup --port $webgui_port app.psgi
 
-    my $text = qq{
+    my $text2 = qq{
         Installation complete.
         Run $install_dir/webgui.sh, then go to http://$site_name:8081 and set up the new site.
         The admin user is "Admin" with password "123qwe".
         Documentation and forums are at http://webgui.org.
         Please hit any reasonable key to exit the installer.
     };
-    enter( $text );
+    enter( $text2 );
 
     endwin();
 
-    print "\n" . $text . "\n";
+    print "\n". $text1 . "\n" . $text2 . "\n";
 
 };
 
