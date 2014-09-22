@@ -1461,14 +1461,15 @@ progress(45);
 # wgd
 #
 
-if( -f 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/null' ) {
+if( -x 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/null' ) {
 
     update "The wgd utility is already installed; not re-installing";
 
 } elsif( -f '/root/wgd.test' ) {
 
     update( "Devel -- Installing the wgd utility from a cached copy" );
-    run "cp -a /root/wgd.test WebGUI/sbin/wgd", noprompt =>1;
+    run "cp -a /root/wgd.test $install_dir/WebGUI/sbin/wgd", noprompt =>1;
+    run "chmod ugo+x $install_dir/WebGUI/sbin/wgd", noprompt => 1;
 
 } else {
 
@@ -1478,7 +1479,7 @@ if( -f 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/n
         update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades... trying again to fetch..." );
         goto try_wgd_again;
     };
-    run 'chmod ugo+x WebGUI/sbin/wgd', noprompt => 1;
+    run "chmod ugo+x $install_dir/WebGUI/sbin/wgd", noprompt => 1;
 
 }
 
