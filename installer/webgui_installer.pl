@@ -757,6 +757,27 @@ my $input_key = *Curses::Widgets::TextField::input_key{CODE};
 #
 #
 
+# $SIG{__DIE__} = sub { bail("Fatal error: $_[0]\n"); };
+# $SIG{__DIE__} = sub { endwin(); print "\n" x 10; Carp::confess($_[0]); };
+$SIG{__DIE__} = sub { bail("Fatal error: $_[0]" . Carp::longmess() ); };
+
+#
+# shut down wG if its currently running
+#
+
+do {
+    if( -d '/etc/init.d' and -x '/etc/init.d/webgui8' ) {
+        update "Stopping WebGUI...";
+        run "/etc/init.d/webgui8 stop", noprompt => 1, nofatal => 1;
+    } else {
+        # XXX OSX?
+    }
+};
+
+#
+# welcome
+#
+
 do {
     enter(qq{
         Welcome to the WebGUI8 installer utility!
@@ -803,11 +824,6 @@ do {
     main_win();  # erase the dialogue
     update();    # redraw after erasing the text dialogue
 };
-
-
-# $SIG{__DIE__} = sub { bail("Fatal error: $_[0]\n"); };
-# $SIG{__DIE__} = sub { endwin(); print "\n" x 10; Carp::confess($_[0]); };
-$SIG{__DIE__} = sub { bail("Fatal error: $_[0]" . Carp::longmess() ); };
 
 
 #
