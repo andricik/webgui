@@ -126,19 +126,35 @@ my $thirtytwo;
 
 my $nginx_etc;
 
-my $verbosity = 1;
+my $verbosity;
 
-my $unattended = 0;
+my $unattended;
 
 my $install_dir;
+my $site_name;
+my $database_name;
+
+sub opt ($) { scalar grep $_ eq $_[0], @ARGV }
+sub arg ($) { my $opt = shift; my $i=1; while($i<=@ARGV) { return $ARGV[$i] if $ARGV[$i-1] eq $opt; $i++; } }
 
 BEGIN {
 
     # detect unattended mode before asking any questions
 
-    if( grep $_ eq '--unattended', @ARGV ) {
-        $verbosity = 0; 
+    if( opt '--unattended' ) {
+
+        print "Welcome to unattended mode!\n";
+
+        $verbosity = -1; 
         $unattended = 1;
+
+        # $database_name gets set from $site_name, and that gets used for filenames of eg the config file
+        $site_name = arg '--domain-name' or die "--unattended mode requires --domain-name <domain name> to be specified";
+
+    } else {
+
+        $verbosity = 0; # for now, until/unless some other level is selected
+
     }
 
     # early bootstrapping
@@ -188,8 +204,10 @@ BEGIN {
          $nginx_etc = 'etc';
 
          $cmd = "$sudo apt-get update";
-         print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
-         goto skip_update if readline(STDIN) =~ m/s/;
+         if( ! $unattended ) {
+             print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
+             goto skip_update if readline(STDIN) =~ m/s/;
+         }
          system $cmd;
        skip_update:
          $cmd = "$sudo apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig";
@@ -228,86 +246,102 @@ BEGIN {
     }
 
     if( $cmd ) {
-        print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
-        system $cmd unless readline(STDIN) =~ m/s/;
+        if( ! $unattended ) {
+            print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
+            goto skip_command if readline(STDIN) =~ m/s/;
+        }
+        system $cmd;
+      skip_command:
     }
 
-    if( ! $unattended ) {
-    
-        # extract the uuencoded, tar-gzd attachments
-    
-        do {
-            # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
-            # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
-            # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
-            my $fn = __FILE__;
-            $fn = "$Bin/$fn" if $fn !~ m{^/};
-            open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
-            # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
+    # extract the uuencoded, tar-gzd attachments
+
+    do {
+        # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
+        # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
+        # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
+        my $fn = __FILE__;
+        $fn = "$Bin/$fn" if $fn !~ m{^/};
+        open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
+        # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
+        while( my $line = readline $data ) {
+            chomp $line;
+            last if $line =~ m/^__DATA__$/;
+        }
+        die if eof $data;
+        while( my $line = readline $data ) {
+            chomp $line;
+            next unless my ($mode, $file) = $line =~ m/^begin\s+(\d+)\s+(\S+)/;
+            open my $fh, '>', $file	or die "can't create $file: $!";
             while( my $line = readline $data ) {
                 chomp $line;
-                last if $line =~ m/^__DATA__$/;
+                last if $line =~ m/^end/;
+                $line = unpack 'u', $line;
+                next unless defined $line and length $line;
+                $fh->print($line) or die $! if length $line;
             }
-            die if eof $data;
-            while( my $line = readline $data ) {
-                chomp $line;
-                next unless my ($mode, $file) = $line =~ m/^begin\s+(\d+)\s+(\S+)/;
-                open my $fh, '>', $file	or die "can't create $file: $!";
-                while( my $line = readline $data ) {
-                    chomp $line;
-                    last if $line =~ m/^end/;
-                    $line = unpack 'u', $line;
-                    next unless defined $line and length $line;
-                    $fh->print($line) or die $! if length $line;
-                }
-            }
-        };
-    
-        # attempt to load Curses and Curses::Widget or go with the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
-    
-        eval { require Curses; require Curses::Widgets; } or do {
-            `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
-    
+        }
+    };
+
+    # attempt to load Curses and Curses::Widget or go with the backup plan -- try to build and install the bundled Curses/Curses::Widgets into /tmp
+
+    eval { require Curses; require Curses::Widgets; } or do {
+        `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
+
+        if( ! $root ) {
+            # this is a failed attempt at dealing with lack of root permission to install perl modules
+            # add to the library path before, so that after Curses is installed, Curses::Widgets can find it during build
+            my $v = '' . $^V;
+            $v =~ s{^v}{};
+            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/${sixtyfour}${thirtytwo}-linux/"; };# Curses.pm in there
+            eval qq{ use lib "/tmp/lib/perl5/"; };# no, Curses.pm is in here!
+            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/"; };  # Curses/Widgets.pm in there
+            eval qq{ use lib "/tmp/lib/perl5/auto/"; };  # no, Curses/Widgets.pm goes in there!  no, it doesn't even... sigh
+        }
+
+        for my $filen ( 'Curses-1.28.modified.tar.gz', 'CursesWidgets-1.997.tar.gz' ) {
+            my $file = $filen;
+            system 'tar', '-xzf', $file and die $@;
+            $file =~ s{\.tar\.gz$}{};
+            $file =~ s{\.modified}{};
+            chdir $file or die $!;
+            die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
+            # XXX would be better to test -w on the perl lib dir; might be a private perl install
             if( ! $root ) {
-                # this is a failed attempt at dealing with lack of root permission to install perl modules
-                # add to the library path before, so that after Curses is installed, Curses::Widgets can find it during build
-                my $v = '' . $^V;
-                $v =~ s{^v}{};
-                eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/${sixtyfour}${thirtytwo}-linux/"; };# Curses.pm in there
-                eval qq{ use lib "/tmp/lib/perl5/"; };# no, Curses.pm is in here!
-                eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/"; };  # Curses/Widgets.pm in there
-                eval qq{ use lib "/tmp/lib/perl5/auto/"; };  # no, Curses/Widgets.pm goes in there!  no, it doesn't even... sigh
+                system $perl, 'Makefile.PL', 'PREFIX=/tmp';
+            } else {
+                system $perl, 'Makefile.PL';
             }
+            system 'make' and die $@;
+            system 'make', 'install' and die $@;
+            chdir '..' or die $!;
+        }
     
-            for my $filen ( 'Curses-1.28.modified.tar.gz', 'CursesWidgets-1.997.tar.gz' ) {
-                my $file = $filen;
-                system 'tar', '-xzf', $file and die $@;
-                $file =~ s{\.tar\.gz$}{};
-                $file =~ s{\.modified}{};
-                chdir $file or die $!;
-                die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
-                # XXX would be better to test -w on the perl lib dir; might be a private perl install
-                if( ! $root ) {
-                    system $perl, 'Makefile.PL', 'PREFIX=/tmp';
-                } else {
-                    system $perl, 'Makefile.PL';
-                }
-                system 'make' and die $@;
-                system 'make', 'install' and die $@;
-                chdir '..' or die $!;
-            }
-        };
+    };
+#            eval <<EOF;
+#    use Curses;
+#    use Curses::Widgets;
+#    use Curses::Widgets::TextField;
+#    use Curses::Widgets::ButtonSet;
+#    use Curses::Widgets::TextMemo;
+#    use Curses::Widgets::ListBox;
+#    use Curses::Widgets::Calendar;
+#    use Curses::Widgets::ComboBox;
+#    use Curses::Widgets::Menu;
+#    use Curses::Widgets::Label;
+#    use Curses::Widgets::ProgressBar;
+#EOF
 
-    } else {
-
-        *endwin = sub { };
-        *text = sub { $_[1] }; # just return the default option
-
-    }  # end if ! $unattended
+#         eval <<'EOF';
+#             *endwin = sub { };
+#             *text = sub { $_[1] }; # just return the default option
+#             sub ACS_HLINE { }
+#             sub ACS_VLINE { }
+#             sub A_BLINK { }
+#             sub KEY_BACKSPACE { }
+# EOF
 
 }
-
-# use lib '/tmp/lib/perl5/site_perl'; # doesn't wind up in any constant place... grr!
 
 use Curses;
 use Curses::Widgets;
@@ -320,6 +354,8 @@ use Curses::Widgets::ComboBox;
 use Curses::Widgets::Menu;
 use Curses::Widgets::Label;
 use Curses::Widgets::ProgressBar;
+
+# use lib '/tmp/lib/perl5/site_perl'; # doesn't wind up in any constant place... grr!
 
 use Carp;
 
@@ -384,9 +420,7 @@ main_win();
 
 # comment box and progress bar is always on the screen but never in focus
 
-my $progress = do {
-
-    return if $unattended;
+my $progress = $unattended ? undef : do {
 
     my ($y, $x);
     $mwh->getmaxyx($y, $x);
@@ -408,7 +442,7 @@ my $progress = do {
 
 my $comment_box_width;
 
-my $comment = do {
+my $comment = $unattended ? undef : do {
 
     return if $unattended;
 
@@ -454,7 +488,7 @@ sub progress {
 }
 
 sub enter {
-    my $text = shift;
+    my $text = shift() || '';
     $text .= "\n" if $text;
     $text .= "Press Enter to continue." if $verbosity >= 0;
     update( tail( $text ) );
@@ -501,6 +535,7 @@ sub bail {
 sub tail {
     my $text = shift;
     my $num_lines = 10;
+    goto unattended if $unattended;
   split_again:
     my @lines = split m/[\n\r]+/, $text;
     for my $line (@lines) {
@@ -510,6 +545,7 @@ sub tail {
             goto split_again;
         }
     }
+  unattended:
     @lines = @lines[ - $num_lines ..  -1 ] if @lines > $num_lines; 
     return join "\n", @lines;
 }
@@ -527,6 +563,7 @@ sub run {
     my $background = delete $opts{background};
     my $nocurses = delete $opts{nocurses};
     my $stdin = delete $opts{stdin};
+    my $password = delete $opts{password};
 
     goto normal_curses_mode if ! $nocurses;
         # we're running outside of the curses UI; do plain text stuff instead
@@ -541,7 +578,7 @@ sub run {
 
     die join ', ', keys %opts if keys %opts;
 
-    my $msg = $comment->getField('VALUE');
+    my $msg = $unattended ? '' : $comment->getField('VALUE');
 
     if( ! $noprompt) {
         update( $msg . qq{\nRunning '$cmd'.\nHit Enter to continue, press "s" to skip this command, or control-C to abort the script.} );
@@ -646,15 +683,29 @@ sub run {
 
             # process the read data; if it was read from STDIN, send it to the child; if we're in nocurses mode and we read from the child processes
             # stdin or stdout, send it to our STDOUT straight away. 
-            if( $handle eq 'installer STDIN') {   # XXX instead of doing this if $stdin is set (and that arg passed), this does it all of the time
+
+            if( $handle eq 'installer STDIN') {
+                # instead of doing this as it maybe should only in the case where the 'stdin' arg was passed, this does it all of the time
                 $to_child->print($buf);
                 $to_child->flush;
             } elsif( $nocurses ) {
                 print($buf);
                 STDOUT->flush;
+                $buf =~ s{[^a-zA-Z0-9 ]}{}g;
+                $output .= $buf;
             } else {
                 $output .= $buf;
             }
+        }
+
+        # special case, so far just to deal with MySQL install on Debian, which fires up a curses UI and asks for a root password to use.
+        if( $password and $output =~ m/assword for the MySQL/ ) {
+            # that will match either of these:
+            # New password for the MySQL "root" user:
+            # Repeat password for the MySQL "root" user:
+            # but we have to take it out of the buffer so that we don't match on it twice
+            $output =~ s{assword for the MySQL}{...password...};
+            $to_child->print($password, "\n");
         }
 
         update( tail( $msg . "\n$cmd:\n$output" ) ) if ! $nocurses;
@@ -824,6 +875,14 @@ do {
         By using this software, you agree to the terms and conditions of the license.
     });
 
+};
+
+#
+# select verbosity level
+#
+
+if( ! $unattended ) {
+
     update(qq{
          Do you want to skip questions that have pretty good defaults?
          "Fewer Questions" and "More Questions" give you a chance to inspect any potentially dangerous commands before they're run.
@@ -850,25 +909,24 @@ do {
     $verbosity = -1 if $verbosity == 2;
     main_win();  # erase the dialogue
     update();    # redraw after erasing the text dialogue
-};
+}
 
 
 #
 # site name
 #
 
-my $site_name;
-my $database_name;
-
 do {
-    update(qq{
-        What domain name are you setting up this WebGUI for?
-        The config file, database, and directory of uploaded files will be named after this.
-        If you've already set up WebGUI and want to add another site, please instead use the addSite.pl utility.
-        This doesn't matter much if you're only setting up one site for development.
-        Most developers use "www.example.com" or "dev.localhost.localdomain".
-    });
-    $site_name = text( 'Domain name', 'www.example.com');
+    if( ! $unattended ) {
+        update(qq{
+            What domain name are you setting up this WebGUI for?
+            The config file, database, and directory of uploaded files will be named after this.
+            If you've already set up WebGUI and want to add another site, please instead use the addSite.pl utility.
+            This doesn't matter much if you're only setting up one site for development.
+            Most developers use "www.example.com" or "dev.localhost.localdomain".
+        });
+        $site_name = text( 'Domain name', 'www.example.com');
+    }
     ($database_name = $site_name) =~ s{\W}{_}g;
 };
 
@@ -1004,8 +1062,6 @@ if( $run_as_user eq 'root' ) {
 
     if( ! $name ) {
 
-        my $new_user_password;
-
       ask_about_making_a_new_user:
         if( $verbosity >= 0 ) {
             update "Create a user to run the WebGUI server process as?";
@@ -1038,6 +1094,7 @@ if( $run_as_user eq 'root' ) {
                 }
     
             }
+
         }
 
         my $new_user_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
@@ -1183,6 +1240,10 @@ if( $mysqld_safe_path ) {
 
   mysql_password_again:
 
+    # this will only run if we don't have a password
+
+    $verbosity < 0 and bail "Didn't have a randomly generated password while running in verbosity < 0 mode";
+
     update( qq{
         Please enter the root password you've (perhaps just now) set for MySQL.
         This will be used to create a new database to hold data for the WebGUI site, and to 
@@ -1209,22 +1270,42 @@ if( $mysqld_safe_path ) {
 
     if( ( $root or $sudo_command ) and $os eq 'debian' ) {
 
+        if( ! -f '/etc/mysql/my.cnf' and ! -f '/etc/my.cnf' ) {
+# XXXX doesn't seem to be working
+            update "Generating a skeletal my.cnf file for MySQL.";
+            write_my_cnf('/usr');
+        }
+
         # my $codename = (split /\s+/, `lsb_release --codename`)[1] || 'squeeze';
 
-        enter(qq{
-            Installing MySQL
-            Write down the MySQL root password.
-            You'll need it to manage MySQL and to complete this setup.
-            Installing these packages:  mysql-client mysql-server
-        });
+        update "Installing MySQL.";
 
-        endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
-        print "\n" x 100;
-        # system( "echo $sudo_password | $sudo_command apt-get install -y mariadb-server" ); # system(), not run(), so have to do sudo the old way XXX does mariadb ask for a password?  if not, can do run()
+        my @extra_args_to_the_run_function;
 
-        run("$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, noprompt => 1, );
+        if( $verbosity >= 0 ) {
 
-        init_curses(); # $mwh = Curses->new; # re-init the screen (echo off, etc)
+            enter(qq{
+                Installing MySQL
+                Write down the MySQL root password.
+                You'll need it to manage MySQL and to complete this setup.
+                Installing these packages:  mysql-client mysql-server
+            });
+
+            endwin(); # clear out the curses stuff temporarily so we can see the output from this one.  this apt-get install is the most likely to have trouble of the lot.
+            print "\n" x 100;
+
+        } else {
+
+            @extra_args_to_the_run_function = ( 
+                password => join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12), 
+                nocurses => 1,
+            );
+
+        }
+
+        run "$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, noprompt => 1, @extra_args_to_the_run_function;
+
+        init_curses();
         main_win();  update();    # redraw
 
     } elsif( ( $root or $sudo_command ) and $os eq 'redhat' ) {
@@ -1248,8 +1329,18 @@ EOF
         run "$sudo_command /sbin/chkconfig mysqld on";
         run "$sudo_command /sbin/service mysqld start"; # this initializes the database, when it works
 
-        update qq{ Please pick a MySQL root password\nDon't forget to write it down.  You'll need it to create other database and manage MySQL.};
-        $mysql_root_password = text('MySQL Root Password', '');
+        if( $verbosity < 0 ) {
+
+            # just pick a random password when running in as few questions as possible mode
+            $mysql_root_password = join('', map { $_->[int rand scalar @$_] } (['a'..'z', 'A'..'Z', '0' .. '9']) x 12);
+
+        } else {
+
+            update qq{ Please pick a MySQL root password\nDon't forget to write it down.  You'll need it to create other database and manage MySQL.};
+            $mysql_root_password = text('MySQL Root Password', '');
+
+        }
+
         update qq{ Setting MySQL root password. };
         # run qq{mysql --user=root -e "SET PASSWORD FOR 'root' = PASSWORD('$mysql_root_password'); SET PASSWORD FOR 'root'\@'localhost' = PASSWORD('$mysql_root_password') SET PASSWORD FOR 'root'\@'127.0.0.1' = PASSWORD('$mysql_root_password');" };
         run "mysqladmin -u root password '$mysql_root_password'";
@@ -1269,21 +1360,7 @@ EOF
 
         update "Installing a MySQL my.cnf config file.";
         # run "cp /usr/local/Cellar/mysql/*/support-files/my-default.cnf /etc/my.cnf";
-        open my $fh, '>', '/etc/my.cnf' or bail "Failed to open /etc/my.cnf for write: ``$!''.";
-        $fh->print(qq{\n
-# For advice on how to change settings please see the utterly useless
-# http://dev.mysql.com/doc/refman/5.6/en/server-configuration-defaults.html
-# This is a minimal config file.
-# For an example of more options, see the template for the default config file:
-# https://github.com/percona/mysql/blob/mysql-5.7/support-files/my-default.cnf.sh
-
-[mysqld]
-
-sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES 
-
-datadir = /usr/local/var/mysql
-basedir = $basedir
-}) or bail "Failed to write to /etc/my.cnf: ``$!''.";
+        write_my_cnf($basedir);
 
         update "Initializing the MySQL database.";
 
@@ -2209,6 +2286,25 @@ log4perl.appender.mainlog.layout.ConversionPattern = %d - %p - %c - %M[%L] - %m%
 EOF
 }
 
+sub write_my_cnf {
+    my $basedir = shift;
+    open my $fh, '>', '/etc/my.cnf' or bail "Failed to open /etc/my.cnf for write: ``$!''.";
+    $fh->print(<<EOF) or bail "Failed to write to /etc/my.cnf: ``$!''.";
+# For advice on how to change settings please see the utterly useless
+# http://dev.mysql.com/doc/refman/5.6/en/server-configuration-defaults.html
+# This is a minimal config file.
+# For an example of more options, see the template for the default config file:
+# https://github.com/percona/mysql/blob/mysql-5.7/support-files/my-default.cnf.sh
+
+[mysqld]
+
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES 
+
+datadir = /usr/local/var/mysql
+basedir = $basedir
+EOF
+    close $fh or bail "failed to close /etc/my.cnf: $!";
+}
 
 __DATA__
 begin 666 Curses-1.28.modified.tar.gz
