@@ -1318,7 +1318,7 @@ do {
 
     } else {
         update(qq{Creating database.});
-        run( qq{mysql --password=$mysql_root_password --user=root -e "create database $database_name"} );
+        run qq{mysql --password='$mysql_root_password' --user=root -e "create database $database_name"}, noprompt => 1;
     }
 
     update(qq{Creating database user.});
