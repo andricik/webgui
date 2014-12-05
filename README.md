@@ -63,7 +63,7 @@ This assumes that your site is "www.example.com".  If it's something else, chang
 Generic source install instructions:
 
 * Load share/create.sql into your MySQL/MariaDB/Percona
-* Run testEnvironment.pl to install all new requirements
+* Run ./sbin/testEnvironment.pl to install all new requirements
 * Get a new wgd, the wG command line tool, from http://haarg.org/wgd
 * Copy [etc/WebGUI.conf.original](etc/WebGUI.conf.original) to etc/www.whatever.com.conf
 * Edit the conf file and set dbuser, dbpass, dsn, uploadsPath (eg to /data/domains/www.example.com/public/uploads/), extrasPath, maintenancePage and siteName
