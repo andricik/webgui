@@ -529,6 +529,7 @@ sub bail {
     }
     endwin();
     print $message, "\n";
+    $feedback == 0 and print "\nIf this is a bug, Scott should soon post a fix on http://twitter.com/scrottie, or please feel free to email scott\@slowass.net to request updates.\n";
     exit 1;
 }
 
