@@ -257,10 +257,11 @@ BEGIN {
     # extract the uuencoded, tar-gzd attachments
 
     do {
-        # we've chdir'd to /tmp already at this point, and we need to handle three scenarios:
-        # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script.
+        # we've chdir'd to /tmp already at this point, and we need to handle four scenarios:
+        # perl /full/path.pl in the same dir as the script; perl /full/path.pl from a different dir; perl path.pl in the same dir as the script; perl partial/path.pl from another dir.
         # __FILE__ will contain the full path when the user uses it; $Bin will always contain the full path; $0 will also contain the full path when the user uses it.
         my $fn = __FILE__;
+        $fn =~ s{.*/}{} if $fn =~ m{.+/};  # if __FILE__ has a partial path in (a / in it but no leading /), then we need to remove that duplicate path part and reply on the full path from FindBin
         $fn = "$Bin/$fn" if $fn !~ m{^/};
         open my $data, '<', $fn or die "can't open $fn: $!"; # huh, so DATA isn't open yet in the BEGIN block, so we have to do this
         # chdir '/tmp' or die $!;  # chdir right after opening ourselves... okay, FindBin obviates that need
