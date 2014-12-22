@@ -1056,7 +1056,7 @@ if( $verbosity >= 1 ) {
 my $run_as_user = getpwuid($>);
 my $current_user = $run_as_user;
 
-if( $run_as_user eq 'root' ) {
+if( $current_user eq 'root' ) {
 
     my ($name, $passwd, $uid, $gid,  $quota, $comment, $gcos, $dir, $shell, $expire) = getpwnam('webgui');
 
