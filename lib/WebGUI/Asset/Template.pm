@@ -739,6 +739,11 @@ sub process {
         my $i18n = WebGUI::International->new($session, 'Asset_Template');
         $output = sprintf $i18n->get('template error').$message, $self->getUrl, $self->getId;
     }
+    if( $session->setting->get("templateDebug") ) {
+        my $id = $self->getId;
+        my $url = $self->getUrl;
+        $output = "<!-- START $id $url -->$output<!-- END $id $url -->";
+    }
 
     # Process the style template
     if ( $self->style ) {
