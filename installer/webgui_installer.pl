@@ -861,7 +861,7 @@ do {
 do {
     enter(qq{
         Welcome to the WebGUI8 installer utility!
-        Currently supported platforms are Debian GNU/Linux, CentOS GNU/Linux, and MacOS X.
+        Currently supported platforms are Debian GNU/Linux and MacOS X.
         You may press control-C at any time to exit.
         Examine commands before they're run to make sure that they're what you want to do!
     });
@@ -1453,6 +1453,8 @@ do {
             run "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
 
         } elsif( $os eq 'redhat' ) {
+
+die "RedHat/CentOS support is currently broken.  Sorry.";
 
             # XXX this installs a ton of stuff, including X, cups, icon themes, etc.  what triggered that?  can we avoid it?
 
