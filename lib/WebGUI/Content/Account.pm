@@ -170,8 +170,10 @@ sub handler {
     #Let the content handler handle trapping errors
     my $output   = $instance->callMethod($method,[],$uid);
     return undef unless (defined $output);
+
+    my $noStyle = $form->get("noStyle");
     
-    return $instance->displayContent($output);
+    return $instance->displayContent($output, $noStyle);
     
 }
 
