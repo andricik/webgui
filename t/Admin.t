@@ -245,6 +245,48 @@ cmp_deeply(
     'www_searchAssets',
 );
 
+# www_getPackages 
+
+# XXX
+
+# code largely stolen from Asset/AssetPackage.t
+
+my $root = WebGUI::Asset->getRoot($session);
+
+my $versionTag = WebGUI::VersionTag->getWorking($session);
+WebGUI::Test->addToCleanup($versionTag);
+$versionTag->set({name=>"Admin getPackages API method test package"});
+
+my $time = time() -2;
+
+my $snippet = $root->addChild({
+    url       => 'snip_snip_admin_getpackages_test',
+    title     => 'snip snip Admin getPackages test',
+    className => 'WebGUI::Asset::Snippet',
+    snippet   => 'Always upgrade to the latest version unless that version is version 8',
+    isPackage => 1,
+}, undef, $time);
+addToCleanup($snippet);
+
+my $storage = $snippet->exportPackage;
+addToCleanup($storage);
+
+$versionTag->commit;
+
+$mech->get_ok( '/?op=admin;method=getPackages' );
+
+cmp_deeply( 
+    JSON->new->decode( $mech->content ), 
+    supersetof(superhashof({
+      "icon" => "/extras/assets/small/snippet.gif",
+      "title" => "snip snip Admin getPackages test",
+      "className" => "WebGUI::Asset::Snippet",
+   }))
+);
+
+
+# end
+
 ok(WebGUI::Test->waitForAllForks(10), "Forks finished");
 
 done_testing;

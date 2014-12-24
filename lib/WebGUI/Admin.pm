@@ -235,6 +235,40 @@ sub getKeywordString {
 
 #----------------------------------------------------------------------
 
+=head2 getPackages
+
+Get an array of packages (wgpkg style) visible to this user.
+This gets added to the new "New Content" admin tab and is also available as JSON.
+
+=cut
+
+sub getPackages {
+    my $self = shift;
+    my $packages = [];
+
+    my $session = $self->session;
+    my $user = $session->user;
+    my $userUiLevel = $user->get('uiLevel');
+
+    for my $package ( @{ WebGUI::Asset::getPackageList( $session ) } ) {
+
+        # Check permissions and UI level
+        next unless ( $package->canView && $package->canAdd($session) && $package->getUiLevel <= $userUiLevel );
+
+        push @$packages, {
+            className   => Scalar::Util::blessed( $package ),
+            url         => "func=deployPackage;assetId=" . $package->getId,
+            title       => $package->getTitle,
+            icon        => $package->getIcon(1),
+        };
+    }
+
+    return $packages;
+
+}
+
+#----------------------------------------------------------------------
+
 =head2 getNewContentTemplateVars 
 
 Get an array of tabs for the new content menu. Each tab contains items
@@ -290,20 +324,9 @@ sub getNewContentTemplateVars {
     } ## end foreach my $assetClass ( keys...)
 
     # packages
-    foreach my $package ( @{ WebGUI::Asset::getPackageList( $session ) } ) {
-        # Check permissions and UI level
-        next unless ( $package->canView && $package->canAdd($session) && $package->getUiLevel <= $userUiLevel );
+    my $packages = $self->getPackages();
+    $categories{packages}{items} = $packages if $packages and @$packages;
 
-        # Create the "packages" category
-        $categories{packages}{items} ||= [];
-
-        push @{ $categories{packages}{items} }, {
-            className   => Scalar::Util::blessed( $package ),
-            url         => "func=deployPackage;assetId=" . $package->getId,
-            title       => $package->getTitle,
-            icon        => $package->getIcon(1),
-        };
-    }
     # If we have any packages, fill in the package category title
     if ( $categories{packages}{items} && @{ $categories{packages}{items} } ) {
         $categories{packages}{title} = $i18n->get('packages');
@@ -821,6 +844,33 @@ sub www_view {
 
     return $output;
 } ## end sub www_view
+
+#----------------------------------------------------------------------
+
+=head2 www_getPackages ( session )
+
+Show the main Admin console wrapper
+
+=cut
+
+sub www_getPackages {
+    my $self = shift;
+    my $session = $self->session;
+
+    $self->session->response->content_type("application/json");
+
+    # my $new_content_tab = $self->getNewContentTemplateVars;
+    # return JSON->new->pretty->encode( $new_content_tab );
+
+    # copied from above; todo fix this
+    # Add a dummy asset to the session to pass canAdd checks
+    # The future canAdd will not check validParent, www_add will instead
+    # This asset is removed before we return...
+    $session->asset( WebGUI::Asset->getDefault( $session ) );
+
+    return JSON->new->pretty->encode( $self->getPackages() );
+
+}
 
 1;
 
