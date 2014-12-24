@@ -27,7 +27,6 @@ use WebGUI::Paths;
 use WebGUI::Types;
 use WebGUI::Exception; 
 
-BEGIN { $Plack::Component::VERSION = '0.0001';  sub Plack::Component::VERSION { }; };
 extends 'Plack::Component';
 
 =head1 NAME
