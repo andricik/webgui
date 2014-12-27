@@ -146,8 +146,10 @@ WebGUI.Admin = function(cfg){
 
         self.adminBar       = new WebGUI.Admin.AdminBar( self.cfg.adminBarId, { expandMax : true } );
         self.adminBar.afterShow.subscribe( self.updateAdminBar, self );
+
         YAHOO.util.Event.on( window, 'load', function(){ self.adminBar.show( self.adminBar.dt[0].id ) } );
         self.newContentBar  = new WebGUI.Admin.AdminBar( "newContentBar", { expandMax : true } );
+        self.newContentBar.afterShow.subscribe( self.updateNewContentBar, self );
 
         self.locationBar    = new WebGUI.Admin.LocationBar( self.cfg.locationBarId, {
             homeUrl : self.cfg.homeUrl
@@ -424,6 +426,72 @@ WebGUI.Admin.prototype.updateAdminBar
         admin.requestUpdateVersionTags.call( admin );
     }
 };
+
+/**
+ * updateNewContentBar( type, args, admin )
+ * Update the NewContentBar. args is an array containing the id of the 
+ * pane being shown.
+ */
+WebGUI.Admin.prototype.updateNewContentBar
+= function ( type, args, admin ) {
+    // "this" is the AdminBar
+    var id  = args[0];
+    // basic, community, intranet, packages, prototypes, shop, utilities, and whatever is defined in the config file under "assetCategories"
+    if ( id == "packages" ) {
+        // packages in particular can be added asyncronously
+        admin.requestUpdatePackages.call( admin );
+
+    }
+};
+
+/**
+ * requestUpdatePackages( )
+ * Request a current list of asset packages from the server
+ */
+WebGUI.Admin.prototype.requestUpdatePackages
+= function ( ) {
+    YAHOO.util.Connect.asyncRequest( 'GET', '?op=admin;method=getPackages', {
+        success : function (o) {
+            var assets = YAHOO.lang.JSON.parse( o.responseText );
+            // Clear out the old packages list
+            var ul = document.getElementById( 'packages' );  // <dt>
+            ul = ul.nextElementSibling; // <dd>
+            ul = ul.firstElementChild; // <div>
+            ul = ul.firstElementChild; // <ul>
+            while ( ul.childNodes.length > 0 ) {
+                ul.removeChild( ul.childNodes[0] );
+            }
+
+            for ( var i = 0; i < assets.length; i++ ) {
+                var asset   = assets[i];
+                var li      = document.createElement('li');
+                var a       = document.createElement('a');
+                var icon    = document.createElement('img');
+                icon.src    = asset.icon;
+                a.appendChild( icon );
+                a.appendChild( document.createTextNode( asset.title ) );
+                li.appendChild( a );
+                ul.appendChild( li );
+                // this.addPasteHandler( a, asset.assetId ); // XXXXXX do something else
+                // YAHOO.util.Event.on( a, "click", function(){  // XXX mean of the addPasteHandler() method
+                    // // Update clipboard after paste in case paste fails
+                    // var updateAfterPaste = function(){
+                        // self.requestUpdateClipboard();
+                        // self.afterNavigate.unsubscribe( updateAfterPaste );
+                    // };
+                    // self.afterNavigate.subscribe(updateAfterPaste, self);
+                    // self.pasteAsset( assetId );
+                // }, self );
+            }
+        },
+        failure : function (o) {
+            alert("Failed to refresh the list of packages");
+        },
+        scope: this
+    });
+
+};
+
 
 /**
  * requestUpdateClipboard( )
@@ -2331,6 +2399,7 @@ WebGUI.Admin.Tree.prototype.showMoreMenu
 /****************************************************************************
  * WebGUI.Admin.AdminBar( id, cfg )
  * Initialize an adminBar with the given ID.
+ * This implements the accordion menu on the left of the admin UI.
  *
  * Configuration:
  *      expandMax:      If true, will always expand pane to maximum space
@@ -2374,7 +2443,7 @@ WebGUI.Admin.AdminBar
         this.dtById[ dt.id ] = dt;
         this.ddById[ dt.id ] = dd;
 
-        this.addClickHandler( dt, dd );
+        this.expandAccordionOnClick( dt, dd );
     }
 
     // Add custom event when showing an AdminBar pane
@@ -2385,7 +2454,7 @@ WebGUI.Admin.AdminBar
  * addClickHandler( dt, dd )
  * Add the correct click handler on the dt to show the dd. 
  */
-WebGUI.Admin.AdminBar.prototype.addClickHandler
+WebGUI.Admin.AdminBar.prototype.expandAccordionOnClick
 = function ( dt, dd ) {
     var self = this;
     YAHOO.util.Event.on( dt, "click", function(){ self.show.call( self, dt.id ) } );
