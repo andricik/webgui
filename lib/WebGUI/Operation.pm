@@ -71,6 +71,8 @@ sub execute {
 =head2 getOperations ( )
 
 Returns a hash reference containing operation and package names.
+Key is the value passed in via CGI as the value in C<op=whatever>.  That gets C<www_> prepended to it and that's used as the method to call.
+Value in this hash is the module under C<WebGUI::Operation::> to invoke the method in.
 
 =cut
 
@@ -154,6 +156,8 @@ sub getOperations {
 		'listLDAPLinks' => 'LDAPLink',
 
 		'viewLoginHistory' => 'LoginHistory',
+
+        'listPackages' => 'Package',
 
 		'editProfile' => 'Profile',
 		'viewProfile' => 'Profile',

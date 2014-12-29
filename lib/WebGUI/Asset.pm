@@ -1191,6 +1191,12 @@ sub getEditForm {
         } ## end foreach my $field ( keys %$meta)
     } ## end if ( $session->setting...)
 
+    ###
+    # Package download button
+    if( $self->isPackage ) {
+         $f->getTab( "meta" )->addField( 'Control', value => qq{<p><a href="?func=exportPackage">Download Asset as wgpkg Package</a></p>}, );
+    }
+
     return $f;
 } ## end sub getEditForm
 

@@ -376,7 +376,7 @@ sub www_exportPackage {
     return $self->session->privilege->insufficient() unless ($self->canEdit);
     my $storage = $self->exportPackage;
     my $filename = $storage->getFiles->[0];
-    $self->session->response->setRedirect($storage->getUrl($storage->getFiles->[0]));
+    $self->session->response->setRedirect($storage->getUrl($filename));
     return "redirect";
 }
 
@@ -425,7 +425,8 @@ sub www_importPackage {
         return undef;
     };
 
-    return $self->www_manageAssets();
+    # if $session->isAdminOn() is true and we're looking at a PageLayout, this should show it with the toolbars, and with the newly imported asset in the layout
+    return $self->www_view();
 }
 
 1;
