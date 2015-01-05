@@ -468,20 +468,13 @@ WebGUI.Admin.prototype.requestUpdatePackages
                 var a       = document.createElement('a');
                 var icon    = document.createElement('img');
                 icon.src    = asset.icon;
+                var url = appendToUrl( this.currentAssetDef.url, asset.url );
+                a.setAttribute('href', url);
+                a.setAttribute('target', 'view');
                 a.appendChild( icon );
                 a.appendChild( document.createTextNode( asset.title ) );
                 li.appendChild( a );
                 ul.appendChild( li );
-                // this.addPasteHandler( a, asset.assetId ); // XXXXXX do something else
-                // YAHOO.util.Event.on( a, "click", function(){  // XXX mean of the addPasteHandler() method
-                    // // Update clipboard after paste in case paste fails
-                    // var updateAfterPaste = function(){
-                        // self.requestUpdateClipboard();
-                        // self.afterNavigate.unsubscribe( updateAfterPaste );
-                    // };
-                    // self.afterNavigate.subscribe(updateAfterPaste, self);
-                    // self.pasteAsset( assetId );
-                // }, self );
             }
         },
         failure : function (o) {
@@ -2007,12 +2000,10 @@ YAHOO.lang.extend( WebGUI.Admin.Tree, WebGUI.Admin.AssetTable );
  * runHelperForSelected( helperId )
  * Run the named asset helper for each selected asset
  * Show the status of the task in a dialog box
- * sdw: I think this is dead code
+ * This is run by the buttons on the bottom of the tree view
  */
 WebGUI.Admin.Tree.prototype.runHelperForSelected
 = function ( helperId, title ) {
-// XXXX this is busted
-// alert("running WebGUI.Admin.Tree.prototype.runHelperForSelected which I think is dead code"); // it isn't; see the buttons on the bottom of tree view
     var self = this;
     var assetIds = this.getSelected();
 
