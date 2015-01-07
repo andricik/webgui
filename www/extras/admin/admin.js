@@ -454,13 +454,8 @@ WebGUI.Admin.prototype.requestUpdatePackages
         success : function (o) {
             var assets = YAHOO.lang.JSON.parse( o.responseText );
             // Clear out the old packages list
-            var ul = document.getElementById( 'packages' );  // <dt>
-            ul = ul.nextElementSibling; // <dd>
-            ul = ul.firstElementChild; // <div>
-            ul = ul.firstElementChild; // <ul>
-            while ( ul.childNodes.length > 0 ) {
-                ul.removeChild( ul.childNodes[0] );
-            }
+            var ul = $('#packages + dd > div > ul');
+            ul.empty();
 
             for ( var i = 0; i < assets.length; i++ ) {
                 var asset   = assets[i];
@@ -474,7 +469,7 @@ WebGUI.Admin.prototype.requestUpdatePackages
                 a.appendChild( icon );
                 a.appendChild( document.createTextNode( asset.title ) );
                 li.appendChild( a );
-                ul.appendChild( li );
+                ul.append( li );
             }
         },
         failure : function (o) {
