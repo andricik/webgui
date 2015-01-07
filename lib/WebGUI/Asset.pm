@@ -508,6 +508,12 @@ sub addEditSaveButtons {
         value   => $i18n->get('cancel','WebGUI'),
     } );
 
+    $buttonGroup->addButton( "Button", {
+        name        => "help",
+        id          => 'helpButton',
+        value       => $i18n->get('the_word_help', 'WebGUI'),
+    } );
+
     return $form->addFieldAt( $buttonGroup, 0 );
 }
 

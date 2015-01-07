@@ -4328,6 +4328,12 @@ LongTruncOk=1</p>
         context     => q{General purpose, similar to submit.},
     },
 
+	'the_word_help' => {
+		message => q|help|,
+		lastUpdated => 1420585602,
+        context => q|Button to reveal hopefully helpful blurbs in the the admin console.|
+    },
+
     'company information' => {
         message     => q{Company Information},
         lastUpdated => 0,
