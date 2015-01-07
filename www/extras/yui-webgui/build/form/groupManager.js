@@ -39,7 +39,7 @@ WebGUI.Form.GroupManager.initDialog = function () {
 	var tabWrapper = document.getElementById('application_workarea');
 	document.body.className= "yui-skin-sam";
 	
-	var headID = document.getElementsByTagName("head")[0];         
+	if( ! tabWrapper ) tabWrapper = document.getElementsByTagName("body")[0];         
 
 	var dialogBox = document.createElement('div');
 	dialogBox.id= "dialog1";
