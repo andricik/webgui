@@ -15,6 +15,8 @@ package Spectre::Workflow;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use HTTP::Request::Common;
 use HTTP::Cookies;
 use POE qw(Component::Client::HTTP);

@@ -14,9 +14,8 @@ package WebGUI::Friends;
 
 =cut
 
-use strict;
-
 use Moose;
+use experimental 'smartmatch';
 
 has 'session' => (
     is              => 'ro',

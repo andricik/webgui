@@ -16,8 +16,12 @@ package WebGUI::Asset::Sku::EMSToken;
 
 use strict;
 use Moose;
+use experimental 'smartmatch';
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Sku';
+
 define assetName           => ['ems token', 'Asset_EventManagementSystem'];
 define icon                => 'EMSToken.gif';
 define tableName           => 'EMSToken';

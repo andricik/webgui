@@ -15,6 +15,8 @@ package WebGUI::Form::Image;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use base 'WebGUI::Form::File';
 use WebGUI::International;
 use WebGUI::Storage;

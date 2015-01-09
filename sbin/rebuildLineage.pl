@@ -11,6 +11,8 @@
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use Getopt::Long;
 use Pod::Usage;
 use WebGUI::Paths -inc;

@@ -57,6 +57,8 @@ property otherFiles => (
 with 'WebGUI::Role::Asset::JSONCollateral';
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Asset;
 use WebGUI::International;
 use WebGUI::Exception;

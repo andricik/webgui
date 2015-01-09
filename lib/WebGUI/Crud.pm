@@ -15,7 +15,6 @@ package WebGUI::Crud;
 
 =cut
 
-
 use strict;
 use Moose;
 use WebGUI::Definition::Crud;
@@ -26,6 +25,7 @@ use WebGUI::DateTime;
 use WebGUI::Exception;
 use WebGUI::FormBuilder;
 use Scalar::Util qw( blessed );
+use experimental 'smartmatch';
 
 has session => (
     is       => 'ro',

@@ -16,6 +16,8 @@ package WebGUI::Session::Url;
 
 
 use strict;
+use experimental 'smartmatch';
+
 use URI;
 use URI::Escape;
 use Scalar::Util qw( weaken );

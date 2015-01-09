@@ -1,6 +1,8 @@
 package WebGUI::Image::Graph;
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Image;
 use WebGUI::Image::Palette;
 use WebGUI::Image::Font;

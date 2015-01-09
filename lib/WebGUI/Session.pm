@@ -15,6 +15,7 @@ package WebGUI::Session;
 =cut
 
 use strict;
+use experimental 'smartmatch';
 use 5.010;
 
 use CHI;

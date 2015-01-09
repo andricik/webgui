@@ -18,7 +18,10 @@ use Moose;
 use WebGUI::Definition::Asset;
 use WebGUI::Asset;
 use WebGUI::International;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset';
+
 define tableName   => 'wobject';
 define assetName   => ['Wobject', 'Asset_Wobject'];
 property description => (

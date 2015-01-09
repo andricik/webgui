@@ -11,6 +11,8 @@
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use File::Basename ();
 use File::Spec;
 
@@ -61,6 +63,7 @@ if ($] >= 5.010) {
 ##Doing this as a global is not nice, but it works
 my $missingModule = 0;
 
+checkModule("experimental",                 0.013        );
 checkModule("Test::Tester",                 "0"          );
 checkModule("LWP",                          5.833        );
 checkModule("HTML::Form",                   5.800,     2 );

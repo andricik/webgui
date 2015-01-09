@@ -22,7 +22,10 @@ use Tie::IxHash;
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset';
+
 define assetName   => ['assetName', 'Asset_RichEdit'];
 define icon        => 'richEdit.gif';
 define tableName   => 'RichEdit';

@@ -18,7 +18,10 @@ use strict;
 use Moose;
 use WebGUI::FormBuilder;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Sku';
+
 define assetName           => ['ems ticket', 'Asset_EventManagementSystem'];
 define icon                => 'EMSTicket.gif';
 define tableName           => 'EMSTicket';

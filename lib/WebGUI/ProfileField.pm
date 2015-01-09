@@ -16,6 +16,8 @@ package WebGUI::ProfileField;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::ProfileCategory;
 use WebGUI::Form::DynamicField;
 use WebGUI::Operation::Shared;

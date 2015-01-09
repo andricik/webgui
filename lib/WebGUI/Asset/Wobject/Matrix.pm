@@ -19,7 +19,10 @@ use WebGUI::International;
 use Moose;
 use WebGUI::Definition::Asset;
 use feature ":5.10";
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject';
+
 define assetName => ['assetName', 'Asset_Matrix'];
 define icon      => 'matrix.gif';
 define tableName => 'Matrix';

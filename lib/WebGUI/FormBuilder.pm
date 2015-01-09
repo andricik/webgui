@@ -1,10 +1,12 @@
 package WebGUI::FormBuilder;
 
 use strict;
+
 use WebGUI::BestPractices;
 use Moose;
 use MooseX::Storage;
 use WebGUI::Exception;
+use experimental 'smartmatch';
 
 =head1 NAME
 

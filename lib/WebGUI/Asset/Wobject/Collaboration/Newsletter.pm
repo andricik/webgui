@@ -13,7 +13,10 @@ package WebGUI::Asset::Wobject::Collaboration::Newsletter;
 use strict;
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject::Collaboration';
+
 define assetName => ['assetName', 'Asset_Newsletter'];
 define icon      => 'newsletter.gif';
 define tableName => 'Newsletter';

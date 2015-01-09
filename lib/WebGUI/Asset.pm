@@ -14,17 +14,20 @@ package WebGUI::Asset;
 
 =cut
 
+use Moose;
+
 use Scalar::Util qw( blessed weaken );
 use Clone qw(clone);
 use JSON;
 use HTML::Packer;
 
-use Moose;
 use WebGUI::Types;
 use Data::Dumper;
 use WebGUI::FormBuilder;
 
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';  # not clear why this needs to be used after everything else, but apparently, in this case, it does
+
 define assetName  => ['asset', 'Asset'];
 define tableName  => 'assetData';
 define icon       => 'assets.gif';

@@ -18,7 +18,10 @@ use WebGUI::SQL;
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject';
+
 define assetName => ["assetName", 'Asset_Navigation'];
 define icon      => 'navigation.gif';
 define tableName => 'Navigation';

@@ -24,6 +24,7 @@ use Moose::Util;
 use Moose::Util::MetaRole;
 
 use namespace::autoclean;
+use experimental 'smartmatch';
 
 no warnings qw(uninitialized);
 

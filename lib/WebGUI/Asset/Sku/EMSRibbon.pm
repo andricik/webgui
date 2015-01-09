@@ -17,7 +17,10 @@ package WebGUI::Asset::Sku::EMSRibbon;
 use strict;
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Sku';
+
 define assetName           => ['ems ribbon', 'Asset_EventManagementSystem'];
 define icon                => 'EMSRibbon.gif';
 define tableName           => 'EMSRibbon';

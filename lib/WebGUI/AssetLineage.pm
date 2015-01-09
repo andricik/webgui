@@ -15,6 +15,8 @@ package WebGUI::Asset;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use Carp qw( croak );
 use Scalar::Util qw( weaken );
 use List::Util qw(first);

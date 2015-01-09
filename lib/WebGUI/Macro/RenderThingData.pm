@@ -11,6 +11,8 @@ package WebGUI::Macro::RenderThingData;
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Asset::Template;
 use WebGUI::International;
 use WebGUI::Asset::Wobject::Thingy;

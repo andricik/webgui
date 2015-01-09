@@ -17,10 +17,14 @@ package WebGUI::Asset::Sku::EMSBadge;
 use strict;
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Sku';
+
 define assetName           => ['ems badge', 'Asset_EventManagementSystem'];
 define icon                => 'EMSBadge.gif';
 define tableName           => 'EMSBadge';
+
 property price => (
             tab             => "shop",
             fieldType       => "float",

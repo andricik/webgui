@@ -14,11 +14,10 @@ package WebGUI::Asset::Template;
 
 =cut
 
-use strict;
-
 use Moose;
 use WebGUI::Definition::Asset;
 extends 'WebGUI::Asset';
+use experimental 'smartmatch';
 
 define assetName   => ['assetName', 'Asset_Template'];
 define icon        => 'template.gif';
@@ -568,11 +567,13 @@ sub getVariableJson {
     my ($class, $session) = @_;
     my ($show, $vars, $json);
 
-    return ($show = $session->stow->get('showTemplateVars'))
+    return (
+           ($show = $session->stow->get('showTemplateVars'))
         && ($vars = $show->{vars})
         && ($json = eval { JSON::encode_json($vars) })
         && ($show->{startDelimiter} . $json . $show->{endDelimiter})
-        or '';
+        or ''
+    );
 }
 
 #-------------------------------------------------------------------

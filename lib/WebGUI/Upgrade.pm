@@ -83,6 +83,7 @@ use File::Path qw(make_path);
 use POSIX qw(strftime);
 use Cwd ();
 use namespace::autoclean;
+use experimental 'smartmatch';
 
 =head1 ATTRIBUTES
 

@@ -15,6 +15,8 @@ package Spectre::Cron;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use DateTime;
 use HTTP::Request::Common;
 use HTTP::Cookies;

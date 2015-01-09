@@ -21,6 +21,7 @@ use Net::LDAP;
 use Time::HiRes;
 use WebGUI::Auth;
 use WebGUI::User;
+use experimental 'smartmatch';
 
 =head1 NAME
 

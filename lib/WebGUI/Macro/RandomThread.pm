@@ -15,6 +15,8 @@ package WebGUI::Macro::RandomThread;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Asset;
 use WebGUI::Asset::Wobject::Collaboration;
 use WebGUI::Asset::Template;

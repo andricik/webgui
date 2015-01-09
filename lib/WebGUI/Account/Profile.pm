@@ -1,6 +1,7 @@
 package WebGUI::Account::Profile;
 
 use strict;
+use experimental 'smartmatch';
 
 use WebGUI::Exception;
 use WebGUI::International;

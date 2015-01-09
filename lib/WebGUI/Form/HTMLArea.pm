@@ -15,6 +15,8 @@ package WebGUI::Form::HTMLArea;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use base 'WebGUI::Form::Textarea';
 use WebGUI::Asset::File::Image;
 use WebGUI::Asset::RichEdit;

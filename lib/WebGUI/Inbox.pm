@@ -15,7 +15,9 @@ package WebGUI::Inbox;
 =cut
 
 use strict;
+
 use WebGUI::Inbox::Message;
+use experimental 'smartmatch';
 
 =head1 NAME
 

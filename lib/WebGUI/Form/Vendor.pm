@@ -15,6 +15,8 @@ package WebGUI::Form::Vendor;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use base 'WebGUI::Form::SelectList';
 use WebGUI::International;
 use WebGUI::Shop::Admin;

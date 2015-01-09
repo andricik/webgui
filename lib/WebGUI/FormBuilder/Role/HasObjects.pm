@@ -14,8 +14,11 @@ package WebGUI::FormBuilder::Role::HasObjects;
 
 =cut
 
+use strict;
+
 use WebGUI::BestPractices;
 use Moose::Role;
+use experimental 'smartmatch';
 
 has 'objects' => (
     is => 'rw',

@@ -15,6 +15,8 @@ package WebGUI::ProfileCategory;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::ProfileField;
 use WebGUI::SQL;
 use WebGUI::Operation::Shared;

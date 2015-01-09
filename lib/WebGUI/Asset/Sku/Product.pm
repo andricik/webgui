@@ -19,6 +19,8 @@ use JSON;
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Sku';
 
 define assetName  => ['assetName', 'Asset_Product'];

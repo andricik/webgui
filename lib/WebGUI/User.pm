@@ -15,6 +15,8 @@ package WebGUI::User;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Group;
 use WebGUI::Workflow::Instance;
 use JSON ();

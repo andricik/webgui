@@ -11,6 +11,8 @@
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use File::Path;
 use File::stat;
 use FileHandle;

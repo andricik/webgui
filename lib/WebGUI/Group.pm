@@ -15,6 +15,8 @@ package WebGUI::Group;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::LDAPLink;
 use WebGUI::Macro;
 use WebGUI::Pluggable;

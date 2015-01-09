@@ -18,6 +18,8 @@ our $STATUS = 'beta';
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use Moose;
 use MooseX::NonMoose;
 use Scalar::Util qw/blessed/;

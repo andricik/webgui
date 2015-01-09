@@ -15,6 +15,7 @@ package WebGUI::AssetCollateral::DataForm::Entry;
 =cut
 
 use strict;
+use experimental 'smartmatch';
 
 =head1 NAME
 

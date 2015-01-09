@@ -1,6 +1,7 @@
 package WebGUI::Account::Inbox;
 
 use strict;
+use experimental 'smartmatch';
 
 use WebGUI::FormBuilder;
 use WebGUI::Exception;

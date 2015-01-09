@@ -15,6 +15,8 @@ package WebGUI::Asset;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use File::Path ();
 use Path::Class ();
 use Scalar::Util qw(looks_like_number);

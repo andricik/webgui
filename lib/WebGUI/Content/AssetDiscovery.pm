@@ -15,6 +15,8 @@ package WebGUI::Content::AssetDiscovery;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use JSON;
 use WebGUI::Asset;
 use XML::Simple;

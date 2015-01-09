@@ -11,6 +11,8 @@
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use Digest::MD5;
 use Getopt::Long;
 use Pod::Usage;

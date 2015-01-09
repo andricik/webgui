@@ -10,11 +10,14 @@ package WebGUI::Asset::Wobject::Collaboration;
 # http://www.plainblack.com                     info@plainblack.com
 #-------------------------------------------------------------------
 
-use strict;
-use Tie::IxHash;
 use Moose;
+
+use Tie::IxHash;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject';
+
 define assetName => ['assetName', 'Asset_Collaboration'];
 define icon      => 'collaboration.gif';
 define tableName => 'Collaboration';

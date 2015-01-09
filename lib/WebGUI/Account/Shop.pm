@@ -1,6 +1,7 @@
 package WebGUI::Account::Shop;
 
 use strict;
+use experimental 'smartmatch';
 
 use WebGUI::Exception;
 use WebGUI::International;

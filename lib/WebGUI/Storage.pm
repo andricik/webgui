@@ -15,6 +15,8 @@ package WebGUI::Storage;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use Archive::Tar;
 use Carp qw( croak );
 use Cwd ();

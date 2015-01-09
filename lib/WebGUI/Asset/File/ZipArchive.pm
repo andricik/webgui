@@ -18,7 +18,10 @@ use strict;
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::File';
+
 define assetName => ['assetName', 'Asset_ZipArchive'];
 define tableName => 'ZipArchiveAsset';
 define icon      => 'ziparchive.gif';

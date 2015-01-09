@@ -16,6 +16,8 @@ package WebGUI::DatabaseLink;
 
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::SQL;
 use WebGUI::International;
 use DBI;

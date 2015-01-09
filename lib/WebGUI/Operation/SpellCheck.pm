@@ -11,6 +11,8 @@ package WebGUI::Operation::SpellCheck;
 #-------------------------------------------------------------------
 
 use strict;
+use experimental 'smartmatch';
+
 use File::Path qw(mkpath);
 # Optional, but if unavailable, spell checking will have no effect.
 my $spellerAvailable;

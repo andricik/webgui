@@ -15,6 +15,8 @@ package WebGUI::Session::DateTime;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use DateTime;
 use DateTime::Format::Strptime;
 use DateTime::Format::Mail;

@@ -10,7 +10,6 @@ package WebGUI::Asset::Wobject::Thingy;
 # http://www.plainblack.com                     info@plainblack.com
 #-------------------------------------------------------------------
 
-use strict;
 use Tie::IxHash;
 use JSON;
 use WebGUI::International;
@@ -20,6 +19,7 @@ use WebGUI::DateTime;
 use PerlIO::eol qw/NATIVE/;
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
 
 extends 'WebGUI::Asset::Wobject';
 define assetName => ['assetName', 'Asset_Thingy'];

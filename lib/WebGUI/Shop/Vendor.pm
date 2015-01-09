@@ -1,9 +1,9 @@
 package WebGUI::Shop::Vendor;
 
-use strict;
 use Scalar::Util qw/blessed/;
 use Moose;
 use WebGUI::Definition;
+use experimental 'smartmatch';
 
 property 'name' => (
     is         => 'rw',

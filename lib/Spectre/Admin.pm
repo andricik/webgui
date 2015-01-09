@@ -15,6 +15,8 @@ package Spectre::Admin;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use HTTP::Request;
 use JSON;
 use Log::Log4perl;

@@ -27,6 +27,8 @@ use JSON ();
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject';
 
 define assetName           => ['assetName', 'Asset_DataForm'];

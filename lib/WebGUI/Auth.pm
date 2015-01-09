@@ -15,6 +15,8 @@ package WebGUI::Auth;
 =cut
 
 use strict qw(subs vars);
+use experimental 'smartmatch';
+
 use Scalar::Util qw( blessed );
 use WebGUI::International;
 use WebGUI::Asset::Template;

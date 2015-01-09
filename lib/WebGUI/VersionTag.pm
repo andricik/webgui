@@ -15,6 +15,8 @@ package WebGUI::VersionTag;
 =cut
 
 use strict;
+use experimental 'smartmatch';
+
 use WebGUI::Asset;
 use WebGUI::Workflow::Instance;
 use WebGUI::DateTime;

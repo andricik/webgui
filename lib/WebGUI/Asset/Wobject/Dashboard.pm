@@ -11,6 +11,7 @@ package WebGUI::Asset::Wobject::Dashboard;
 #-------------------------------------------------------------------
 
 use strict;
+
 use WebGUI::International;
 use WebGUI::ProfileField;
 use Time::HiRes;
@@ -18,7 +19,10 @@ use WebGUI::Asset::Wobject;
 
 use Moose;
 use WebGUI::Definition::Asset;
+use experimental 'smartmatch';
+
 extends 'WebGUI::Asset::Wobject';
+
 define assetName => [ 'assetName', 'Asset_Dashboard' ];
 define icon      => 'dashboard.gif';
 define tableName => 'Dashboard';
