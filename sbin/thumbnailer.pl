@@ -20,7 +20,7 @@ use File::stat;
 use File::Find ();
 use Getopt::Long;
 use Pod::Usage;
-use Image::Magick;
+# use Image::Magick; # XXX
 use experimental 'smartmatch';
 
 use WebGUI::Paths -inc;

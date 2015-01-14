@@ -2,7 +2,7 @@ package WebGUI::Image;
 
 use strict;
 use WebGUI::Image::Palette;
-use Image::Magick;
+# use Image::Magick; # XXX
 
 =head1 NAME
 
