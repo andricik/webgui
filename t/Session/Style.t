@@ -195,7 +195,7 @@ $session->setting->set('userFunctionStyleId', $templates->{user}->getId);
 
 is($style->userStyle('userStyle'), 'USER PRINTABLE STYLE TEMPLATE:userStyle',
 'userStyle returns templated output according to userFunctionStyleId in settings');
-is($session->http->getCacheControl, 'none', 'userStyle(via process): HTTP cacheControl set to none to prevent proxying');
+is($session->response->getCacheControl, 'none', 'userStyle(via process): HTTP cacheControl set to none to prevent proxying');
 
 is($style->userStyle('userStyle'), 'USER PRINTABLE STYLE TEMPLATE:userStyle',
 'userStyle returns templated output according to userFunctionStyleId in settings');
@@ -207,7 +207,7 @@ is($style->userStyle(undef), undef,
 'userStyle returns undef if no output is sent');
 
 $session->setting->set('userFunctionStyleId', $origUserStyle);
-$session->http->setCacheControl(undef); ##return to default setting for downstream testing
+$session->response->setCacheControl(undef); ##return to default setting for downstream testing
 ####################################################
 #
 # process 
@@ -257,7 +257,7 @@ my $expectedMetas = [
            },
 ];
 cmp_bag(\@metas, $expectedMetas, 'process:default meta tags');
-is($session->http->{_http}{cacheControl}, undef, 'process: HTTP cacheControl undefined');
+is($session->response->{_http}{cacheControl}, undef, 'process: HTTP cacheControl undefined');
 
 $session->user({userId=>3});
 $styled = $style->process('body.content');
@@ -306,7 +306,7 @@ $head =~ s/(^HEAD=.+$)/$1/s;
 cmp_bag(\@metas, $expectedMetas, 'process:default meta tags with no caching head tags, preventProxyCache setting');
 $session->setting->set('preventProxyCache', $origPreventProxyCache);
 
-is($session->http->getCacheControl, 'none', 'process: HTTP cacheControl set to none to prevent proxying');
+is($session->response->getCacheControl, 'none', 'process: HTTP cacheControl set to none to prevent proxying');
 
 ####################################################
 #
