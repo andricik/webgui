@@ -28,7 +28,6 @@ use WebGUI::User;
 use WebGUI::Session::DateTime;
 use WebGUI::Session::Log;
 use WebGUI::Session::Form;
-use WebGUI::Session::Http;
 use WebGUI::Session::Icon;
 use WebGUI::Session::Id;
 use WebGUI::Session::Output;
@@ -448,23 +447,6 @@ sub hasSettings {
     my $self = shift;
     return exists $self->{_setting};
 }
-
-#-------------------------------------------------------------------
-
-=head2 http ( )
-
-Returns a reference to the WebGUI::Session::Http object.
-
-=cut
-
-sub http {
-	my $self = shift;
-	unless ($self->{_http}) {
-		$self->{_http} = WebGUI::Session::Http->new($self);
-	}
-	return $self->{_http};
-}
-
 
 #-------------------------------------------------------------------
 
