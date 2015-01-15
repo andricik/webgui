@@ -3,6 +3,7 @@ use strict;
 use parent qw(Plack::Request);
 use WebGUI::Session::Response;
 use HTTP::BrowserDetect;
+use HTTP::Date ();
 
 =head1 SYNOPSIS
 
