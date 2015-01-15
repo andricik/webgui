@@ -27,20 +27,20 @@ use Test::Deep;
 
 my $session = WebGUI::Test->session;
 
-my $http     = $session->http;
+my $request = $session->request;
 my $response = $session->response;
 
 use Test::MockObject::Extends;
 
 ##This tests mocks http's getCookies so that it doesn't have to
 ##try and implement the mod_perl cookie handling code.
-$http = Test::MockObject::Extends->new($http);
+$request = Test::MockObject::Extends->new($request);
 my $cookieName = $session->config->getCookieName;
 my $varId = $session->getId();
 
-$http->mock( getCookies => sub { return {$cookieName => $varId} } );
+$request->mock( getCookies => sub { return {$cookieName => $varId} } );
 
-isa_ok($http, 'WebGUI::Session::Http', 'session has correct object type');
+isa_ok($response, 'WebGUI::Session::Response', 'session has correct object type');
 
 ####################################################
 #
@@ -49,13 +49,13 @@ isa_ok($http, 'WebGUI::Session::Http', 'session has correct object type');
 ####################################################
 
 $response->status('200');
-ok(!$http->isRedirect, 'isRedirect: 200 is not');
+ok(!$response->isRedirect, 'isRedirect: 200 is not');
 
 $response->status('301');
-ok($http->isRedirect, '... 301 is');
+ok($response->isRedirect, '... 301 is');
 
 $response->status('302');
-ok($http->isRedirect, '... 302 is too');
+ok($response->isRedirect, '... 302 is too');
 $response->status('200');
 
 ####################################################
@@ -64,25 +64,25 @@ $response->status('200');
 #
 ####################################################
 
-$http->setStreamedFile('');
-is($http->getStreamedFile, undef, 'set/get StreamedFile: false values return undef, empty string');
-$http->setStreamedFile(undef);
-is($http->getStreamedFile, undef, 'set/get StreamedFile: false values return undef, empty string');
+$response->setStreamedFile('');
+is($response->getStreamedFile, undef, 'set/get StreamedFile: false values return undef, empty string');
+$response->setStreamedFile(undef);
+is($response->getStreamedFile, undef, 'set/get StreamedFile: false values return undef, empty string');
 
 my $actual_file = $session->config->get('uploadsPath') . '/9e/a3/9ea37e148e517d4ae3d6326f691d848f/previous.gif'; # arbitrary file that exactually exists and hopefully will continue for a while
-$http->setStreamedFile( $actual_file );
-is($http->getStreamedFile, $actual_file, 'set/get StreamedFile: set specific location and get it');
+$response->setStreamedFile( $actual_file );
+is($response->getStreamedFile, $actual_file, 'set/get StreamedFile: set specific location and get it');
 
 do {
     eval { 
-        $http->setStreamedFile( $actual_file . '_but_actually_not_an_actual_file_because_someone_appended_a_bunch_of_bloody_garbage_to_it' );
+        $response->setStreamedFile( $actual_file . '_but_actually_not_an_actual_file_because_someone_appended_a_bunch_of_bloody_garbage_to_it' );
     };
     my $e = WebGUI::Error->caught("WebGUI::Error::InvalidFile");
     my $errorMessage = $e->error;
     ok($errorMessage =~ m/No such file or directory/, "set/get StreamedFile: setting a non-existant file blows stuff up but that's okay because it's handled gracefully" );
 };
 
-$http->setStreamedFile('');
+$response->setStreamedFile('');
 
 ####################################################
 #
@@ -90,11 +90,11 @@ $http->setStreamedFile('');
 #
 ####################################################
 
-is($http->getLastModified, undef, 'getLastModified: default is undef');
+is($response->getLastModified, undef, 'getLastModified: default is undef');
 
-$http->setLastModified(12);
-is($http->getLastModified, 12, 'set/get LastModified: epoch date set');
-$http->setLastModified(undef);
+$response->setLastModified(12);
+is($response->getLastModified, 12, 'set/get LastModified: epoch date set');
+$response->setLastModified(undef);
 
 ####################################################
 #
@@ -102,15 +102,15 @@ $http->setLastModified(undef);
 #
 ####################################################
 
-is($http->getCacheControl, 1, 'getCacheControl: default is 1');
+is($response->getCacheControl, 1, 'getCacheControl: default is 1');
 
-$http->setCacheControl("none");
-is($http->getCacheControl, "none", 'set/get CacheControl: set to "none"');
-$http->setCacheControl(7200);
-is($http->getCacheControl, 7200, 'set/get CacheControl: set to 7200');
-$http->setCacheControl(0);
-is($http->getCacheControl, 1, 'set/get CacheControl: set to 0 returns 1');
-$http->setCacheControl(undef);
+$response->setCacheControl("none");
+is($response->getCacheControl, "none", 'set/get CacheControl: set to "none"');
+$response->setCacheControl(7200);
+is($response->getCacheControl, 7200, 'set/get CacheControl: set to 7200');
+$response->setCacheControl(0);
+is($response->getCacheControl, 1, 'set/get CacheControl: set to 0 returns 1');
+$response->setCacheControl(undef);
 
 ####################################################
 #
@@ -120,7 +120,7 @@ $http->setCacheControl(undef);
 
 $session->request->uri('/here/later');
 
-$http->setRedirect('/here/now');
+$response->setRedirect('/here/now');
 is($response->status, 302, 'setRedirect: sets HTTP status');
 is($response->location, '/here/now', 'setRedirect: redirect location');
 
@@ -141,10 +141,10 @@ my $sessionAsset = $session->asset;
 $session->{_asset} = WebGUI::Asset->getDefault($session);
 my $defaultAssetUrl = $session->asset->getUrl;
 
-is($http->setRedirect($defaultAssetUrl), undef, 'setRedirect: returns undef if returning to self and no params');
+is($response->setRedirect($defaultAssetUrl), undef, 'setRedirect: returns undef if returning to self and no params');
 
 $session->request->setup_body({ param1 => 'value1' });
-isnt($http->setRedirect('/here/now'), undef, 'setRedirect: does not return undef if returning to self but there are params');
+isnt($response->setRedirect('/here/now'), undef, 'setRedirect: does not return undef if returning to self but there are params');
 
 $session->{_asset} = $sessionAsset;
 
@@ -160,13 +160,13 @@ $session->setting->set('preventProxyCache', 0);
 ##Clear request object for next two tests
 $session->{_request} = undef;
 
-is($http->getNoHeader, undef, 'getNoHeader: defaults to undef');
-$http->setNoHeader(1);
-is($http->getNoHeader, 1, 'get/set NoHeader: returns set value');
-is($http->sendHeader, undef, 'sendHeader returns undef when setNoHeader is true');
+is($response->getNoHeader, undef, 'getNoHeader: defaults to undef');
+$response->setNoHeader(1);
+is($response->getNoHeader, 1, 'get/set NoHeader: returns set value');
+is($response->sendHeader, undef, 'sendHeader returns undef when setNoHeader is true');
 
-$http->setNoHeader(0);
-is($http->sendHeader, undef, 'sendHeader returns undef when no request object is available');
+$response->setNoHeader(0);
+is($response->sendHeader, undef, 'sendHeader returns undef when no request object is available');
 
 ####################################################
 #
@@ -179,8 +179,8 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     my $session1 = WebGUI::Test->newSession('noCleanup');
     my $guard   = WebGUI::Test->cleanupGuard($session1);
 
-    $session1->http->setRedirect('/here/there');
-    $session1->http->sendHeader;
+    $session1->response->setRedirect('/here/there');
+    $session1->response->sendHeader;
     is($session1->response->status, 302, 'sendHeader as redirect: status set to 301');
     cmp_deeply(
         headers_out($session1->response->headers),
@@ -203,13 +203,13 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     ##A new, clean session
     my $session  = WebGUI::Test->newSession('nocleanup');
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
+    my $response = $session->response;
     my $response = $session->response;
     $response->status(200);
     $session->request->protocol('');
-    $http->setLastModified(1200);
+    $response->setLastModified(1200);
 
-    $http->sendHeader();
+    $response->sendHeader();
     is($response->status, 200, 'sendHeader: status set');
     cmp_deeply(
         [ $response->content_type ],
@@ -237,11 +237,11 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     ##A new, clean session
     my $session  = WebGUI::Test->newSession('nocleanup', { SERVER_PROTOCOL => 'HTTP 1.1', });
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
+    my $response = $session->response;
     my $response = $session->response;
     $response->header( 'Content-Disposition' => qq{attachment; filename="image.png"});
     $response->content_type('image/png');
-    $http->sendHeader();
+    $response->sendHeader();
     is($response->headers->content_type, 'image/png', 'sendHeader: mimetype');
     cmp_deeply(
         headers_out($response->headers),
@@ -265,10 +265,10 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     $http_request->protocol('HTTP/1.0');
     my $session  = WebGUI::Test->newSession('nocleanup', $http_request);
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
+    my $response = $session->response;
     my $response = $session->response;
     my $time = $session->datetime->epochToHttp(time());
-    $http->sendHeader();
+    $response->sendHeader();
     my $headers       = headers_out($response->headers);
     my $expire_header = $headers->{Expires};
     my $delta = deltaHttpTimes($session->datetime->epochToHttp(), $expire_header);
@@ -298,10 +298,10 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     $http_request->protocol('HTTP/1.0');
     my $session  = WebGUI::Test->newSession('nocleanup', $http_request);
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
     my $response = $session->response;
-    $http->setCacheControl(500);
-    $http->sendHeader();
+    my $response = $session->response;
+    $response->setCacheControl(500);
+    $response->sendHeader();
     my $headers       = headers_out($response->headers);
     my $expire_header = $headers->{Expires};
     my $delta = deltaHttpTimes($session->datetime->epochToHttp(time+500), $expire_header);
@@ -330,12 +330,12 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     ##A new, clean session
     my $session  = WebGUI::Test->newSession('nocleanup');
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
+    my $response = $session->response;
     my $response = $session->response;
 
     $session->setting->set('preventProxyCache', 1);
 
-    $http->sendHeader();
+    $response->sendHeader();
     cmp_deeply(
         headers_out($response->headers),
         {
@@ -359,10 +359,10 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     ##A new, clean session
     my $session  = WebGUI::Test->newSession('nocleanup');
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
     my $response = $session->response;
-    $http->setCacheControl('none');
-    $http->sendHeader();
+    my $response = $session->response;
+    $response->setCacheControl('none');
+    $response->sendHeader();
     cmp_deeply(
         headers_out($response->headers),
         {
@@ -384,11 +384,11 @@ is($http->sendHeader, undef, 'sendHeader returns undef when no request object is
     ##A new, clean session
     my $session  = WebGUI::Test->newSession('nocleanup');
     my $guard    = WebGUI::Test->cleanupGuard($session);
-    my $http     = $session->http;
+    my $response = $session->response;
     my $response = $session->response;
     $session->user({userId => 3});
 
-    $http->sendHeader();
+    $response->sendHeader();
     cmp_deeply(
         headers_out($response->headers),
         {
