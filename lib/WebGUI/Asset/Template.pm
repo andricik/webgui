@@ -687,7 +687,7 @@ sub process {
     if ($self->state =~ /^trash/) {
         my $i18n = WebGUI::International->new($session, 'Asset_Template');
         $session->log->warn('process called on template in trash: '.$self->getId
-            .'. The template was called through this url: '.$session->asset->url);
+            .'. The template was called through this url: '. ( eval { $session->asset->url } || 'none' ) );
         return $session->isAdminOn ? $i18n->get('template in trash') : '';
     }
     elsif ($self->state =~ /^clipboard/) {
