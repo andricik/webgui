@@ -76,9 +76,9 @@ $asset->update({
     jsonField => [ { alpha => "aye", beta => "bee", },  ],
 });
 
-is(
-    $session->db->quickScalar(q|select jsonField from jsonCollateralDummy where assetId=? and revisionDate=?|, [$asset->getId, $asset->get('revisionDate')]),
-    '[{"alpha":"aye","beta":"bee"}]',
+cmp_deeply(
+    [ $session->db->quickScalar(q|select jsonField from jsonCollateralDummy where assetId=? and revisionDate=?|, [$asset->getId, $asset->get('revisionDate')]) ],  # get an array to compare with subbagof()
+    subbagof( '[{"alpha":"aye","beta":"bee"}]', '[{"beta":"bee","alpha":"aye"}]' ),  # randomized hash ordering makes it impossible to know what order the keys will be in
     'JSON updated in the db'
 );
 

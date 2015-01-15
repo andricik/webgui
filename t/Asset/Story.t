@@ -174,7 +174,11 @@ $story->setPhotoData([
     },
 ]);
 
-is($story->photo, q|[{"caption":"Shawshank Prison","byLine":"Andrew Dufresne"}]|, 'setPhotoData: set JSON in the photo property');
+cmp_deeply(
+    [ $story->photo ],
+    subbagof('[{"caption":"Shawshank Prison","byLine":"Andrew Dufresne"}]', '[{"byLine":"Andrew Dufresne","caption":"Shawshank Prison"}]'),  # randomized hash order means there are two possible key orders
+    'setPhotoData: set JSON in the photo property'
+);
 
 $photoData = $story->getPhotoData();
 $photoData->[0]->{caption}="My cell";

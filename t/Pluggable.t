@@ -48,15 +48,13 @@ eval { WebGUI::Pluggable::load("No::Way::In::Hell") };
 isnt($@, '', "Module shouldn't load.");
 eval { WebGUI::Pluggable::load("Config::JSON") };
 is($@, '', "Module should load.");
-my $string = WebGUI::Pluggable::run("Data::Dumper","Dumper",[ {color=>"black", make=>"honda"}]);
+my $string = WebGUI::Pluggable::run("Data::Dumper","Dumper",[ {color=>"black"}]);
 is($string, q|$VAR1 = {
-          'make' => 'honda',
           'color' => 'black'
         };
 |, "Can run a function.");
-my $dumper = WebGUI::Pluggable::instanciate("Data::Dumper","new",[ [{color=>"black", make=>"honda"}]]);
+my $dumper = WebGUI::Pluggable::instanciate("Data::Dumper","new",[ [{color=>"black"}]]);
 is($dumper->Dump, q|$VAR1 = {
-          'make' => 'honda',
           'color' => 'black'
         };
 |, "Can instanciate an object.");
