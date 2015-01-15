@@ -454,7 +454,7 @@ $session->response->location(undef);
 $secureUrl = $session->url->getSiteURL . $session->url->page();
 $secureUrl =~ s/http:/https:/;
 ok($session->url->forceSecureConnection(), 'forced secure connection with no url param');
-ok($session->http->isRedirect, '... and redirect status code was set');
+ok($session->response->isRedirect, '... and redirect status code was set');
 is($session->response->location, $secureUrl, '... and redirect status code was set');
 
 done_testing;
