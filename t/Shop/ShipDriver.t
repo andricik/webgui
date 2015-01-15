@@ -24,6 +24,7 @@ use WebGUI::Session;
 use WebGUI::Shop::ShipDriver;
 use WebGUI::Test::Mechanize;
 use Clone;
+use Algorithm::Permute;
 
 #----------------------------------------------------------------------------
 # Init
@@ -90,12 +91,14 @@ like($driver->getId, $session->id->getValidator, 'got a valid GUID for shipperId
 cmp_deeply($driver->get, { %{$options}, shipperId=>ignore()} , 'get works');
 
 my $dbData = $session->db->quickHashRef('select * from shipper where shipperId=?',[$driver->getId]);
+my @valid_json_fragments = ('"groupToUse":7', '"label":"Slow and dangerous"', '"enabled":1');   # bit of a hack; randomized hash ordering means there are several possible valid json fragments
+my @valid_json; Algorithm::Permute::permute { push @valid_json, '{' . join(',', @valid_json_fragments ) . '}' } @valid_json_fragments;
 cmp_deeply(
     $dbData,
     {
         shipperId => $driver->getId,
         className => ref($driver),
-        options   => q|{"groupToUse":7,"label":"Slow and dangerous","enabled":1}|,
+        options   => any(@valid_json),
     },
     'Correct data written to the db',
 );
