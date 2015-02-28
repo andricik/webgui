@@ -69,7 +69,7 @@ Generic source install instructions:
 * Edit the conf file and set dbuser, dbpass, dsn, uploadsPath (eg to /data/domains/www.example.com/public/uploads/), extrasPath, maintenancePage and siteName
 * Copy [etc/log.conf.original](etc/log.conf.original) to etc/log.conf .
 * Edit etc/log.conf such that log4perl.appender.mainlog.filename points to a writable path.  For example: ```log4perl.appender.mainlog.filename = webgui.log``` works for local development.
-* Set WEBGUI_CONFIG to point at your new config file.  For example: ```export WEBGUI_CONFIG=etc/www.whatever.com.conf``` .
+* Set WEBGUI_CONFIG to point at your new config file.  For example: ```export WEBGUI_CONFIG=www.whatever.com.conf``` .
 * Run upgrades (yes, even for brand new install):  wgd reset --upgrade
 * Copy the "extras" directory from whereever you unpacked it to whereever you pointed extrasPath to in the config file.  For example, if you unpacked the source in /data/WebGUI and the extrasPath to /data/domains/www.example.com/public/, you'd run: rsync -r -a /data/WebGUI/www/extras /data/domains/www.example.com/public/
 
