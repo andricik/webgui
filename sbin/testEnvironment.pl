@@ -11,7 +11,7 @@
 #-------------------------------------------------------------------
 
 use strict;
-use experimental 'smartmatch';
+BEGIN { eval { use experimental 'smartmatch'; } };
 
 use File::Basename ();
 use File::Spec;
