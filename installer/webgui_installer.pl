@@ -1581,23 +1581,11 @@ progress(50);
 
 do {
     update( "Installing required Perl modules..." );
-    if( $root or $sudo_command or -w $Config{sitelib_stem} ) {
-        # if it's a perlbrew perl and the libs directory is writable by this user, or we're root, or we have sudo, just
-        # install the module stright into the site lib.
-        # if it fails, hopefully it wasn't important or else testEnvironment.pl can pick up the slack
-        # XXX should send reports when modules fail to build
-        # these don't have noprompt because RedHat users are cranky about perl modules not coming through their package system and I promised them that I would let them approve everything significant before it happens; need an ultra-low-verbosity verbosity setting
-        run "$sudo_command $perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out
-        run "$sudo_command $perl WebGUI/sbin/cpanm -n Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
-        run "$sudo_command $perl WebGUI/sbin/cpanm -n Task::WebGUI", nofatal => 1, noprompt => 1;
-    } else {
-        # backup plan is to build an extlib directory
-        # XXX this hasn't been tested in a long time
-        mkdir "$install_dir/extlib"; # this is up and outside of 'WebGUI'
-        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out XXX probably needs a non-interactive mode
-        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
-        run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib Task::WebGUI", nofatal => 1, noprompt => 1;
-    }
+    # XXX should send reports when modules fail to build
+    run "$perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out; what the heck uses this anyway?
+    run "$perl WebGUI/sbin/cpanm -n Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
+    run "$perl WebGUI/sbin/cpanm -n experimental", noprompt => 1;  # heh.  testEnvironment.pl uses experimental to silence smartmatch warnings, but for older perls, it might not be installed.  bootstrap that.
+    run "$perl WebGUI/sbin/cpanm -n Task::WebGUI", noprompt => 1;
 };
 
 #
