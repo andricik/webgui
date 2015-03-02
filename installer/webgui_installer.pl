@@ -130,6 +130,7 @@ my $unattended;
 my $install_dir;
 my $site_name;
 my $database_name;
+my $mysql_root_password;
 
 sub opt ($) { scalar grep $_ eq $_[0], @ARGV }
 sub arg ($) { my $opt = shift; my $i=1; while($i<=@ARGV) { return $ARGV[$i] if $ARGV[$i-1] eq $opt; $i++; } }
@@ -154,6 +155,7 @@ BEGIN {
 
         # $database_name gets set from $site_name, and that gets used for filenames of eg the config file
         $site_name = arg '--domain-name' or die "--unattended mode requires --domain-name <domain name> to be specified";
+        $mysql_root_password = arg '--mysql-root-password';
 
     } else {
 
@@ -1145,8 +1147,6 @@ if( $mysqld_path ) {
     ($mysqld_version) = $mysqld_version =~ m/Ver\s+(\d+\.\d+)\./ if $mysqld_version;
 }
 
-my $mysql_root_password;
-
 if( $mysqld_safe_path ) {
 
     # mysql already exists
@@ -1181,6 +1181,12 @@ if( $mysqld_safe_path ) {
     };
 
     #
+    # jump ahead to trying to use a mysql root password if one was specified eg on the command line
+    #
+
+    goto already_have_possible_mysql_root_password if defined $mysql_root_password;
+
+    #
     # test to see if the mysql root password is perhaps blank and if so, run with that
     #
 
@@ -1194,13 +1200,11 @@ if( $mysqld_safe_path ) {
     # ask the user to tell us what the password is if we don't have it
     #
 
-    goto already_have_possible_mysql_root_password if defined $mysql_root_password;
-
   mysql_password_again:
 
     # this will only run if we don't have a password
 
-    $verbosity < 0 and bail "Didn't have a randomly generated password while running in verbosity < 0 mode";
+    $verbosity < 0 and bail "Didn't have a mysql root password while running in verbosity < 0 mode; specify it with the --mysql-root-password option or run with higher verbosity";
 
     update( qq{
         Please enter the root password you've (perhaps just now) set for MySQL.
@@ -1217,7 +1221,9 @@ if( $mysqld_safe_path ) {
     update( qq{ Testing to see if the MySQL root password we have works. } );
     run( "mysql --user=root --password=$mysql_root_password -e 'show databases'", noprompt => 1, nofatal => 1 ) or goto mysql_password_again;
 
+    #
     # end of the scenario where we found a mysqld already installed and we just need to get the root password before we can continue
+    #
 
     update( qq{Deleting MySQL anonymous user.\nIt's okay if this user already doesn't exist and this fails.} );
     run qq{mysql --user=root --password='$mysql_root_password' -e "drop user '';" }, nofatal => 1, noprompt => 1;
