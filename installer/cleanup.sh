@@ -15,4 +15,4 @@ killall starman
 # mysql --user=root --password=Nyklm6 -e 'drop database www_example_com;'
 rm -rf /var/lib/mysql
 apt-get remove akonadi-backend-mysql  libdbd-mysql-perl libmysqlclient18:amd64 mysql-client-5.5 mysql-common mysql-server-core-5.5
-
+userdel webgui
