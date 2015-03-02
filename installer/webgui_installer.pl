@@ -136,6 +136,11 @@ sub arg ($) { my $opt = shift; my $i=1; while($i<=@ARGV) { return $ARGV[$i] if $
 
 my $bugtracker = 'https://github.com/AlliumCepa/webgui/issues/';
 
+# XXX might have to export these symbols to make things work for that one French fellow, but I don't actually see where in the code it's matching the output of commands
+# LANG=en_US
+# LANGUAGE=en_US
+# LC_ALL=en_US
+
 BEGIN {
 
     # detect unattended mode before asking any questions
@@ -1005,38 +1010,48 @@ if( $current_user eq 'root' ) {
 
     if( ! $name ) {
 
-      ask_about_making_a_new_user:
         if( $verbosity >= 0 ) {
-            update "Create a user to run the WebGUI server process as?";
-            my $dialogue = Curses::Widgets::ListBox->new({
-                 Y           => 2,
-                 X           => 38,
-                 COLUMNS     => 20,
-                 LISTITEMS   => ['Yes', 'No'],
-                 VALUE       => 'webgui',
-                 SELECTEDCOL => 'white',
-                 CAPTION     => 'Create a user?',
-                 CAPTIONCOL  => 'white',
-                 FOCUSSWITCH => "\t\n",
-            });
-            if( $verbosity >= 1 ) {
-                $dialogue->draw($mwh);
-                $dialogue->execute($mwh);
-                main_win();  # erase the dialogue
-                update();    # redraw after erasing the text dialogue
-            } else {
-                # for low or super low verbosity, assume yes
-                $dialogue->setField('CURSORPOS', 0);
-            }
-            if( $dialogue->getField('CURSORPOS') == 0 ) {
-              ask_what_username_to_use_for_the_new_user:
-                $run_as_user = text('New Username', '') or goto ask_about_making_a_new_user;
-                if( $run_as_user =~ m/[^a-z0-9_]/ ) {
-                    update "Create a new user to run the WebGUI server process as?\nUsername must be numbers, letters, and underscore, and should be lowercase.";
-                    goto ask_what_username_to_use_for_the_new_user;
+
+          ask_about_making_a_new_user:
+            if( $verbosity >= 0 ) {
+                update "Create a user to run the WebGUI server process as?";
+                my $dialogue = Curses::Widgets::ListBox->new({
+                     Y           => 2,
+                     X           => 38,
+                     COLUMNS     => 20,
+                     LISTITEMS   => ['Yes', 'No'],
+                     VALUE       => 'webgui',
+                     SELECTEDCOL => 'white',
+                     CAPTION     => 'Create a user?',
+                     CAPTIONCOL  => 'white',
+                     FOCUSSWITCH => "\t\n",
+                });
+                if( $verbosity >= 1 ) {
+                    $dialogue->draw($mwh);
+                    $dialogue->execute($mwh);
+                    main_win();  # erase the dialogue
+                    update();    # redraw after erasing the text dialogue
+                } else {
+                    # for low or super low verbosity, assume yes
+                    $dialogue->setField('CURSORPOS', 0);
+                }
+                if( $dialogue->getField('CURSORPOS') == 0 ) {
+                  ask_what_username_to_use_for_the_new_user:
+                    $run_as_user = text('New Username', '') or goto ask_about_making_a_new_user;
+                    if( $run_as_user =~ m/[^a-z0-9_]/ ) {
+                        update "Create a new user to run the WebGUI server process as?\nUsername must be numbers, letters, and underscore, and should be lowercase.";
+                        goto ask_what_username_to_use_for_the_new_user;
+                    }
+        
                 }
     
             }
+
+        } elsif( $verbosity == -1 ) {
+
+            # just create a 'webgui' user
+            # unattended mode, which sets verbosity to -1 like "As Few Questions as Possible", was bombing out trying to create a 'root' user
+            $run_as_user = 'webgui';
 
         }
 
