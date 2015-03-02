@@ -102,7 +102,7 @@ my $perl;
 
 my $root;
 
-BEGIN { $root = $> == 0; };
+BEGIN { $root = $> == 0; $root or die "Non-root installations aren't supported.  Sorry.  Please look for the source install instructions or run as roon."; };
 
 use Cwd;
 
@@ -180,13 +180,6 @@ BEGIN {
         $cpu or die "Couldn't detect which CPU you have, which we use for figuring out which version of certain packages to install; please open a bug ticket at $bugtracker";
     }
     
-    # are we root?
-
-    my $sudo = $root ? '' : `which sudo` || '';
-    chomp $sudo;
-
-    $root or die "Non-root installations aren't supported.  Sorry.  Please look for the source install instructions or run as roon.";
-
     # default install dir
 
     $install_dir = $root ? '/data' : "$ENV{HOME}/webgui";
@@ -199,21 +192,21 @@ BEGIN {
 
          $nginx_etc = 'etc';
 
-         $cmd = "$sudo apt-get update";
+         $cmd = "apt-get update";
          if( ! $unattended ) {
              print "running: $cmd\nHit Enter to continue or Control-C to abort or 's' to skip.\n\n";
              goto skip_update if readline(STDIN) =~ m/s/;
          }
          system $cmd;
        skip_update:
-         $cmd = "$sudo apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig unzip";
+         $cmd = "apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig unzip";
 
     } elsif( $os eq 'redhat' ) {
 
         $nginx_etc = 'etc';
 
         # no counterpart to libcurses-perl or libcurses-widgets-perl so we have to fallback on building from the bundled tarball XXX really?
-        $cmd = "$sudo yum install --assumeyes gcc make automake kernel-devel man ncurses-devel.$cpu perl-devel.$cpu sudo";
+        $cmd = "yum install --assumeyes gcc make automake kernel-devel man ncurses-devel.$cpu perl-devel.$cpu sudo";
 
     } elsif( $os eq 'darwin' ) {
 
@@ -955,37 +948,6 @@ do {
 progress(5);
 
 #
-# sudo password
-#
-
-# sudo installs don't currently work
-
-my $sudo_password = '';
-my $sudo_command = '';
-
-if( ! $root and `which sudo` ) {
-  sudo_command_again:
-    update( qq{
-        If you like, enter your account password to use to sudo various commands.
-        You'll be prompted before each command.
-        You may also skip entering your password here and manually complete the steps that require root access in another terminal window.
-    } );
-    $sudo_password = text( qq{sudo password}, '' ) or goto no_sudo_command;
-    # $sudo_command = "echo $sudo_password | sudo -S "; # prepended to stuff that needs to run as root XXX
-    $sudo_command = "sudo -S -- "; # prepended to stuff that needs to run as root
-    run( "$sudo_command ls /root", nofatal => 1, ) or goto sudo_command_again;
-  no_sudo_command:
-} elsif( ! $root ) {
-    die "running as a user isn't currently working; sorry"; # XXXXXX
-    enter( qq{
-        This script isn't running as root and I don't see sudo.
-        You'll be prompted to run commands as root in another terminal window when and if needed.
-    } );
-};
-
-progress(10);
-
-#
 # var and log dirs
 #
 
@@ -1199,7 +1161,7 @@ if( $mysqld_safe_path ) {
        if( $ps !~ m/mysqld/ ) {
             bail "wait, thought we had a mysqld at this point, but we don't have a mysqld_safe_path with which to start mysqld"  unless $mysqld_safe_path;  # XXX move this check to earlier on in mysql detection
             update(qq{Starting mysqld...});
-            run( qq{ $sudo_command $mysqld_safe_path }, input => $sudo_password, noprompt => 1, background => 1, );
+            run $mysqld_safe_path, noprompt => 1, background => 1;  # XXX run mysql as any particular user? 
        }
     };
 
@@ -1249,7 +1211,7 @@ if( $mysqld_safe_path ) {
 
     # install and set up MySQL
 
-    if( ( $root or $sudo_command ) and $os eq 'debian' ) {
+    if( $os eq 'debian' ) {
 
         if( ! -f '/etc/mysql/my.cnf' and ! -f '/etc/my.cnf' ) {
 # XXXX doesn't seem to be working
@@ -1284,14 +1246,14 @@ if( $mysqld_safe_path ) {
 
         }
 
-        run "$sudo_command apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, noprompt => 1, @extra_args_to_the_run_function;
+        run "apt-get install -y --force-yes mysql-client mysql-server", nocurses => 1, stdin => 1, noprompt => 1, @extra_args_to_the_run_function;
 
         init_curses();
         main_win();  update();    # redraw
 
-    } elsif( ( $root or $sudo_command ) and $os eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
 
-        run( "$sudo_command yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
+        run( "yum install --assumeyes mysql.$cpu mysql-devel.$cpu mysql-server.$cpu" );
 
         # have to start mysqld; rpm doesn't do it
 
@@ -1307,8 +1269,8 @@ EOF
             close $fh or bail "writing to /etc/sysconfig/network: $!";
         }
 
-        run "$sudo_command /sbin/chkconfig mysqld on";
-        run "$sudo_command /sbin/service mysqld start"; # this initializes the database, when it works
+        run "/sbin/chkconfig mysqld on";
+        run "/sbin/service mysqld start"; # this initializes the database, when it works
 
         if( $verbosity < 0 ) {
 
@@ -1326,7 +1288,7 @@ EOF
         # run qq{mysql --user=root -e "SET PASSWORD FOR 'root' = PASSWORD('$mysql_root_password'); SET PASSWORD FOR 'root'\@'localhost' = PASSWORD('$mysql_root_password') SET PASSWORD FOR 'root'\@'127.0.0.1' = PASSWORD('$mysql_root_password');" };
         run "mysqladmin -u root password '$mysql_root_password'";
 
-    } elsif( ( $root or $sudo_command ) and $os eq 'darwin' ) {
+    } elsif( $os eq 'darwin' ) {
 
         endwin();    # brew does a curses progress display
         print "\n" x 100;
@@ -1423,66 +1385,57 @@ progress(25);
 #
 
 do {
-    if( $root or $sudo_command and ( $os eq 'debian' or $os eq 'redhat' ) ) {
+    if( $os eq 'debian' ) {
 
-        if( $os eq 'debian' ) {
+        run "apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
 
-            # run( $sudo_command . 'apt-get update', noprompt => 1, );
- # XXXX yes, but are we installing perlmagick for the *correct* perl install?  not if they built their own perl.  regardless, that should get the deps installed so that cpanm can build Image::Magick as well.
-            run "$sudo_command apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
-
-        } elsif( $os eq 'redhat' ) {
+    } elsif( $os eq 'redhat' ) {
 
 die "RedHat/CentOS support is currently broken.  Sorry.";
 
-            # XXX this installs a ton of stuff, including X, cups, icon themes, etc.  what triggered that?  can we avoid it?
+        # XXX this installs a ton of stuff, including X, cups, icon themes, etc.  what triggered that?  can we avoid it?
 
-            run( " $sudo_command yum install --assumeyes libpng12-dev ImageMagick-perl.$cpu openssl.$cpu openssl-devel.$cpu expat-devel.$cpu git curl" ); # $cpu looks like eg 'x86_64'
-            # http://wiki.nginx.org/Install:
-            # "Due to differences between how CentOS, RHEL, and Scientific Linux populate the $releasever variable, it is necessary to manually 
-            # replace $releasever with either "5" (for 5.x) or "6" (for 6.x), depending upon your OS version."
-            # XXX prompt before doing this
+        run( "yum install --assumeyes libpng12-dev ImageMagick-perl.$cpu openssl.$cpu openssl-devel.$cpu expat-devel.$cpu git curl" ); # $cpu looks like eg 'x86_64'
+        # http://wiki.nginx.org/Install:
+        # "Due to differences between how CentOS, RHEL, and Scientific Linux populate the $releasever variable, it is necessary to manually 
+        # replace $releasever with either "5" (for 5.x) or "6" (for 6.x), depending upon your OS version."
+        # XXX prompt before doing this
 
-            # if( ! -f '/etc/yum.repos.d/nginx.repo' ) 
+        # if( ! -f '/etc/yum.repos.d/nginx.repo' ) 
 
-            # XXX sudo cat?
-            my $fh;
-            open $fh, '<', '/etc/redhat-release' or bail "can't open /etc/redhat-release to figure out which version we are to set the correct nginx repo with: $!";  
-            (my $version) = readline $fh;
-            close $fh;
-            (my $releasever) = $version =~ m/release (\d+)\./;
-            (my $redhatcentos) = $version =~ m/(redhat|centos)/i or bail "reading /etc/redhat-release, couldn't match (redhat|centos) in ``$version''";
-            $redhatcentos = lc $redhatcentos;
-            $redhatcentos = 'rhel' if $redhatcentos eq 'redhat'; # just guessing here
-            open $fh, '>', '/etc/yum.repos.d/nginx.repo' or bail "can't write to /etc/yum.repos.d/nginx.repo: $!";
-            my $cpu2 = $cpu;  $cpu2 = 'i386' if $cpu2 eq 'i686'; # for crying out loud...
-            $fh->print(<<EOF);
+        # XXX sudo cat?
+        my $fh;
+        open $fh, '<', '/etc/redhat-release' or bail "can't open /etc/redhat-release to figure out which version we are to set the correct nginx repo with: $!";  
+        (my $version) = readline $fh;
+        close $fh;
+        (my $releasever) = $version =~ m/release (\d+)\./;
+        (my $redhatcentos) = $version =~ m/(redhat|centos)/i or bail "reading /etc/redhat-release, couldn't match (redhat|centos) in ``$version''";
+        $redhatcentos = lc $redhatcentos;
+        $redhatcentos = 'rhel' if $redhatcentos eq 'redhat'; # just guessing here
+        open $fh, '>', '/etc/yum.repos.d/nginx.repo' or bail "can't write to /etc/yum.repos.d/nginx.repo: $!";
+        my $cpu2 = $cpu;  $cpu2 = 'i386' if $cpu2 eq 'i686'; # for crying out loud...
+        $fh->print(<<EOF);
 [nginx]
 name=nginx repo
 baseurl=http://nginx.org/packages/$redhatcentos/$releasever/$cpu2/
 gpgcheck=0
 enabled=1
 EOF
-            close $fh;
-            run( $sudo_command . 'yum install --assumeyes nginx' );
+        close $fh;
+        run( 'yum install --assumeyes nginx' );
 
-        } elsif( $os eq 'darwin' ) {
+    } elsif( $os eq 'darwin' ) {
 
-            endwin();    # brew does a curses progress display
+        endwin();    # brew does a curses progress display
 
-            # xz is a dep for perlmagick but it isn't listed; it provides lzma for one of the image compressors or something
+        # xz is a dep for perlmagick but it isn't listed; it provides lzma for one of the image compressors or something
 
-            run "$sudo_command brew install openssl expat nginx xz perlmagick";
+        run "brew install openssl expat nginx xz perlmagick";
 
-            init_curses(); main_win(); update();  # fire our curses UI back up again
-
-        }
-
-    } else {
-
-        enter( "WebGUI needs the perlmagick libssl-dev libexpat1-dev git curl and build-essential packages but I'm not running as root or I'm on a strange system so I can't install them; please either install these (or their equivilents) or else run this script as root.\nThen resume or restart this installer." ); 
+        init_curses(); main_win(); update();  # fire our curses UI back up again
 
     }
+
 };
 
 progress(30);
@@ -1597,7 +1550,7 @@ do {
     update( "Checking for any additional needed Perl modules..." );
 
     if( $os eq 'redhat' ) {
-        run( "$sudo_command $perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
+        run( "$perl WebGUI/sbin/cpanm -n CPAN --verbose", noprompt => 1, nofatal => 1, );  # RedHat's perl doesn't come with the CPAN shell
     }
 
     my $test_environment_output = run "$perl WebGUI/sbin/testEnvironment.pl --noprompt --simpleReport", nofatal => 1, noprompt => 1;  # it's okay if it finds things not installed because we're installing them; also some things just won't install and we have to do our best
@@ -1610,15 +1563,7 @@ do {
         my $nofatal = 0;
         $nofatal = 1 if $result eq 'Imager::File::PNG'; # Imager::Probe is failing sooo hard; I could spoon fed it, but it's ignoring it and coming up with garbage; oh joy... it's failing on Debian, too
         update( "Installing Perl module $result from CPAN:" );
-        if( $root or $sudo_command or -w $Config{sitelib_stem} ) {
-            # if it's a perlbrew perl and the libs directory is writable by this user, or we're root, or we have sudo, just
-            # install the module stright into the site lib.
-            run "$sudo_command $perl WebGUI/sbin/cpanm -n $result", noprompt => 1, nofatal => $nofatal;
-        } else {
-            # backup plan is to build an extlib directory
-            mkdir "$install_dir/extlib"; # XXX moved this up outside of 'WebGUI'
-            run "$perl WebGUI/sbin/cpanm -n -L $install_dir/extlib $result", noprompt => 1, nofatal => $nofatal;
-        }
+        run "$perl WebGUI/sbin/cpanm -n $result", noprompt => 1, nofatal => $nofatal;
     }
 
 };
@@ -1844,8 +1789,8 @@ EOF
     if( $os eq 'debian' ) {
         # XXX is nginx set to start automatically when its installed?
     } elsif( $os eq 'redhat' ) {
-        run "$sudo_command /sbin/chkconfig nginx on", noprompt => 1 ;
-        run "$sudo_command /sbin/service nginx start", noprompt => 1 ;
+        run "/sbin/chkconfig nginx on", noprompt => 1 ;
+        run "/sbin/service nginx start", noprompt => 1 ;
     } elsif( $os eq 'darwin' ) {
         # XXX is nginx set to start automatically?  don't think so in this case
     }
@@ -1963,7 +1908,7 @@ do {
 
         update "Attempting to start the WebGUI server process...\n";
 
-        # run "$sudo_command /sbin/service webgui8 start", noprompt => 1, background => 1 ; # working around this process going zombie
+        # run "/sbin/service webgui8 start", noprompt => 1, background => 1 ; # working around this process going zombie
 
         run "/etc/init.d/mysql start", noprompt => 1;
         run "/etc/init.d/nginx restart", noprompt => 1;
