@@ -917,7 +917,7 @@ do {
         update(qq{
             Where do you want to install WebGUI8?
             Please enter an absolute path name (starting with a /).
-            The git repository will be checked out into a 'WebGUI' directory inside of there.
+            A copy of the git repository will be unzipped 'WebGUI' directory inside of there.
             The configuration files will be placed inside of 'WebGUI/etc' in there.
             Static and uploaded files for your site will be kept under in a 'domains' directory in there.
             Traditionally, WebGUI has lived inside of the '/data' directory, but this is not necessary.
@@ -1519,9 +1519,11 @@ if( -x 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/n
 } else {
 
     update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades...", noprompt => 1, );
+    my $tries_left = 3;
   try_wgd_again:
-    run( 'curl --insecure --location http://haarg.org/wgd > WebGUI/sbin/wgd', nofatal => 1, noprompt => 1, ) or do {
+    run( 'curl --insecure --location http://haarg.org/wgd -o WebGUI/sbin/wgd', nofatal => ($tries_left ? 1 : 0), noprompt => 1, ) or do {
         update( "Installing the wgd (WebGUI Developer) utility to use to run upgrades... trying again to fetch..." );
+        $tries_left--;
         goto try_wgd_again;
     };
     run "chmod ugo+x $install_dir/WebGUI/sbin/wgd", noprompt => 1;
@@ -1657,14 +1659,13 @@ do {
     } else {
         mkdir "$install_dir/domains" or bail "Couldn't create $install_dir/domains: $!";
         mkdir "$install_dir/domains/$site_name" or bail "Couldn't create $install_dir/domains/$site_name: $!";
-        # mkdir "$install_dir/domains/$site_name/logs" or bail "Couldn't create $install_dir/domains/$site_name/logs: $!"; # not under /data/wre but instead in WebGUI and we let the user pick a dir earlier on
+        # mkdir "$install_dir/domains/$site_name/logs" or bail "Couldn't create $install_dir/domains/$site_name/logs: $!"; # not under /data/wre but instead in WebGUI and we let the user pick a dir earlier on XXX what?
         mkdir "$install_dir/domains/$site_name/public" or bail "Couldn't create $install_dir/domains/$site_name/public: $!";
         mkdir "$install_dir/domains/$site_name/public/uploads" or bail "Couldn't create $install_dir/domains/$site_name/public/uploads: $!";
         update qq{Populating $install_dir/domains/$site_name/public/uploads with bundled static HTML, JS, and CSS... };
-        run "$perl WebGUI/sbin/wgd reset --uploads", noprompt => 1;
-        # run "cp -a WebGUI/www/extras $install_dir/domains/public/", noprompt => 1;     # matches $config->set( extrasPath      => "$install_dir/domains/$site_name/public/extras", ), above # XXX nginx points into WebGUI/www/extras ... 
+        run "$perl $install_dir/WebGUI/sbin/wgd reset --uploads", noprompt => 1;
         run "chown $run_as_user $install_dir", noprompt => 1;
-        run "chown -R $run_as_user $install_dir/domains/$site_name/public/uploads", noprompt => 1;
+        run "chown -R $run_as_user $install_dir/domains/$site_name/public/uploads", noprompt => 1;  # XXX I would kind of like it better if 'domains' was inside of 'WebGUI'
     }
 };
 
@@ -1825,12 +1826,12 @@ do {
         However, a new config file and database dump are not included in each release, so upgrades 
         are necessary even for brand new installs.
     } );
-    if( $run_as_user eq 'root' ) {    # XXX this assumes that the installer is being run as root, which may not be the case
-        run "$perl WebGUI/sbin/wgd reset --upgrade  --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
+    if( $run_as_user eq 'root' ) {
+        run "$perl $install_dir/WebGUI/sbin/wgd reset --upgrade  --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
     } else {
         # run upgrades as the user wG is going to run as so that log files, uploads, etc are all owned by that user
         # this is the normal case and the scenario that this installer sets up
-        run "sudo -u $run_as_user $perl WebGUI/sbin/wgd reset --upgrade --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
+        run "sudo -u $run_as_user $perl $install_dir/WebGUI/sbin/wgd reset --upgrade --config-file=$database_name.conf --webgui-root=$install_dir/WebGUI", noprompt => 1;
     }
 
 
