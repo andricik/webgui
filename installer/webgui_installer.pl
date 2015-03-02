@@ -117,10 +117,7 @@ my $os;
 
 # cpu architecture and flags for different cpu architectures
 
-my $cpu;
-
-my $sixtyfour;
-my $thirtytwo;
+my $cpu = 'unknown';  # right now, only Linux sets this and uses it
 
 # where config files wind up
 
@@ -136,6 +133,8 @@ my $database_name;
 
 sub opt ($) { scalar grep $_ eq $_[0], @ARGV }
 sub arg ($) { my $opt = shift; my $i=1; while($i<=@ARGV) { return $ARGV[$i] if $ARGV[$i-1] eq $opt; $i++; } }
+
+my $bugtracker = 'https://github.com/AlliumCepa/webgui/issues/';
 
 BEGIN {
 
@@ -175,21 +174,18 @@ BEGIN {
     # only applicable to Linux
 
     if( $os eq 'linux' ) {
-        $sixtyfour = $Config{archname} =~ m/x86_64/ ? '64' : ''; # XXX use these everywhere apt-get gets run
-        $thirtytwo = $Config{archname} =~ m/i686/ ? '32' : '';
-    
         $cpu = $Config{archname};
         $cpu =~ s{-.*}{};
         $cpu = 'i686' if $cpu eq 'i386'; # at least for RedHat
+        $cpu or die "Couldn't detect which CPU you have, which we use for figuring out which version of certain packages to install; please open a bug ticket at $bugtracker";
     }
     
     # are we root?
-    # XXX sudo not currently working
 
     my $sudo = $root ? '' : `which sudo` || '';
     chomp $sudo;
 
-    $root or die "Non-root installations aren't currently supported.  Sorry.  Feel free to add the feature and share the code if you're able to!"; # XXX
+    $root or die "Non-root installations aren't supported.  Sorry.  Please look for the source install instructions or run as roon.";
 
     # default install dir
 
@@ -289,30 +285,13 @@ BEGIN {
     eval { require Curses; require Curses::Widgets; } or do {
         `which make` or die 'Cannot bootstrap.  Please install "make" (eg, apt-get install make) and try again.';
 
-        if( ! $root ) {
-            # this is a failed attempt at dealing with lack of root permission to install perl modules
-            # add to the library path before, so that after Curses is installed, Curses::Widgets can find it during build
-            my $v = '' . $^V;
-            $v =~ s{^v}{};
-            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/${sixtyfour}${thirtytwo}-linux/"; };# Curses.pm in there
-            eval qq{ use lib "/tmp/lib/perl5/"; };# no, Curses.pm is in here!
-            eval qq{ use lib "/tmp/lib/perl5/site_perl/$v/"; };  # Curses/Widgets.pm in there
-            eval qq{ use lib "/tmp/lib/perl5/auto/"; };  # no, Curses/Widgets.pm goes in there!  no, it doesn't even... sigh
-        }
-
         for my $filen ( 'Curses-1.28.modified.tar.gz', 'CursesWidgets-1.997.tar.gz' ) {
             my $file = $filen;
             system 'tar', '-xzf', $file and die $@;
             $file =~ s{\.tar\.gz$}{};
             $file =~ s{\.modified}{};
             chdir $file or die $!;
-            die "Curses::Widgets not bootstrapping into a private lib directory on RedHat currently, sorry" if $os eq 'redhat' and ! $root;
-            # XXX would be better to test -w on the perl lib dir; might be a private perl install
-            if( ! $root ) {
-                system $perl, 'Makefile.PL', 'PREFIX=/tmp';
-            } else {
-                system $perl, 'Makefile.PL';
-            }
+            system $perl, 'Makefile.PL';
             system 'make' and die $@;
             system 'make', 'install' and die $@;
             chdir '..' or die $!;
@@ -530,7 +509,7 @@ sub bail {
     }
     endwin();
     print $message, "\n";
-    $feedback == 0 and print "\nIf this is a bug, Scott should soon post a fix on http://twitter.com/scrottie, or please feel free to email scott\@slowass.net to request updates.\n";
+    $feedback == 0 and print "\nIf this is a bug, Scott should soon post a fix on http://twitter.com/scrottie, or please feel free to open a bug ticket on $bugtracker.\n";
     exit 1;
 }
 
