@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env perl
 
 # to run this installer on CentOS, do:
 
@@ -206,7 +206,7 @@ BEGIN {
          }
          system $cmd;
        skip_update:
-         $cmd = "apt-get install -y build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig unzip";
+         $cmd = "apt-get install -y sudo build-essential libncurses5-dev libpng-dev libcurses-perl libcurses-widgets-perl chkconfig unzip";
 
     } elsif( $os eq 'redhat' ) {
 
@@ -1114,8 +1114,6 @@ if( $current_user eq 'root' ) {
     }
 }
 
-goto WEBGUI;
-
 progress(15);
 
 #
@@ -1413,10 +1411,10 @@ do {
         run "apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
 
         # debian packages of requires modules, 1:1 correspondence
-        run "apt-get install -y libhtml-packer-perl libdatetime-format-http-perl libhtml-tagcloud-perl libhtml-highlight-perl libxml-feedpp-perl libmime-tools-perl libfile-path-perl libtest-deep-perl liblist-moreutils-perl libdbi-perl libdatetime-event-ical-perl libtest-mockobject-perl libtext-aspell-perl libimage-magick-perl libdbd-mysql-perl libpath-class-perl libmodule-find-perl libtie-cphash-perl libpoe-perl libhtml-template-perl libmoosex-nonmoose-perl libplack-middleware-status-perl libmoosex-storage-perl libcolor-calc-perl libnet-subnets-perl libchi-perl libpoe-component-client-http-perl libmoose-perl libplack-middleware-debug-perl libtest-harness-perl libnamespace-autoclean-perl libplack-perl liblocales-perl libnet-cidr-lite-perl libarchive-any-perl libreadonly-perl libconfig-json-perl libparams-validate-perl libnet-ldap-perl libdatetime-perl libarchive-zip-perl libdatetime-format-strptime-perl libfinance-quote-perl libclass-insideout-perl libdigest-sha-perl libcrypt-ssleay-perl libjson-any-perl libbusiness-paypal-api-perl libpod-coverage-perl libcache-fastmmap-perl libtest-exception-perl libtest-class-perl libdatetime-format-mail-perl libhtml-parser-perl liblog-log4perl-perl liblwp-perl libscope-guard-perl libhtml-tagfilter-perl libtie-ixhash-perl libxml-simple-perl libjavascript-packer-perl libposix-perl libcss-packer-perl libcss-minifier-xs-perl libhtml-template-expr-perl libclass-c3-perl libtemplate-perl libexception-class-perl libimage-exiftool-perl libbusiness-tax-vat-validation-perl libjavascript-minifier-xs-perl libclone-perl libjson-perl", noprompt => 1;
+        run "apt-get install -y libhtml-packer-perl libdatetime-format-http-perl libhtml-tagcloud-perl libhtml-highlight-perl libxml-feedpp-perl libmime-tools-perl libfile-path-perl libtest-deep-perl liblist-moreutils-perl libdbi-perl libdatetime-event-ical-perl libtest-mockobject-perl libtext-aspell-perl libimage-magick-perl libdbd-mysql-perl libpath-class-perl libmodule-find-perl libtie-cphash-perl libpoe-perl libhtml-template-perl libmoosex-nonmoose-perl libplack-middleware-status-perl libmoosex-storage-perl libcolor-calc-perl libnet-subnets-perl libchi-perl libpoe-component-client-http-perl libmoose-perl libplack-middleware-debug-perl libtest-harness-perl libnamespace-autoclean-perl libplack-perl liblocales-perl libnet-cidr-lite-perl libarchive-any-perl libreadonly-perl libconfig-json-perl libparams-validate-perl libnet-ldap-perl libdatetime-perl libarchive-zip-perl libdatetime-format-strptime-perl libfinance-quote-perl libclass-insideout-perl libdigest-sha-perl libcrypt-ssleay-perl libjson-any-perl libbusiness-paypal-api-perl libpod-coverage-perl libcache-fastmmap-perl libtest-exception-perl libtest-class-perl libdatetime-format-mail-perl libhtml-parser-perl liblog-log4perl-perl libscope-guard-perl libhtml-tagfilter-perl libtie-ixhash-perl libxml-simple-perl libjavascript-packer-perl libcss-packer-perl libcss-minifier-xs-perl libhtml-template-expr-perl libclass-c3-perl libtemplate-perl libexception-class-perl libimage-exiftool-perl libbusiness-tax-vat-validation-perl libjavascript-minifier-xs-perl libclone-perl libjson-perl libalgorithm-permute-perl libio-pty-perl", noprompt => 1;
 
         # rest of required modules except Plack::Middleware::ForwardedHeaders
-	run "apt-get install -y libhttp-message-perl libtext-csv-xs-perl libchi-driver-memcached-perl liburi-escape-xs-perl libpoe-component-ikc-perl libtest-simple-perl libweather-com-perl", noprompt => 1;
+	run "apt-get install -y libwww-perl libhttp-message-perl libtext-csv-xs-perl libchi-driver-memcached-perl liburi-escape-xs-perl libpoe-component-ikc-perl libtest-simple-perl libweather-com-perl", noprompt => 1;
 
     } elsif( $os eq 'redhat' ) {
 
@@ -1500,10 +1498,11 @@ do {
             run("curl --insecure --location $url --output /tmp/webgui.zip", noprompt => 1,);
         }
         update("Extract WebGUI from the archive...");
-        run( "unzip -o /tmp/webgui.zip", noprompt => 1, );
+        run( "unzip -q -o /tmp/webgui.zip", noprompt => 1, );
         rename("webgui-master", "WebGUI") or bail "Failed to rename webgui_master to WebGUI in $install_dir: $!";
     }
 };
+
 
 progress(40);
 
@@ -1559,8 +1558,6 @@ if( -x 'WebGUI/sbin/wgd' and ! system '( perl -c WebGUI/sbin/wgd 2>&1 ) > /dev/n
 
 }
 
-WEBGUI:
-
 progress(50);
 
 # Task::WebGUI
@@ -1568,10 +1565,10 @@ progress(50);
 do {
     update( "Installing required Perl modules..." );
     # XXX should send reports when modules fail to build
-    run "$perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out; what the heck uses this anyway?
-    run "$perl WebGUI/sbin/cpanm -n Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
-    run "$perl WebGUI/sbin/cpanm -n experimental", noprompt => 1;  # heh.  testEnvironment.pl uses experimental to silence smartmatch warnings, but for older perls, it might not be installed.  bootstrap that.
-    run "$perl WebGUI/sbin/cpanm -n Task::WebGUI", noprompt => 1;
+    # run "$perl WebGUI/sbin/cpanm -n IO::Tty --verbose", nofatal => 1, noprompt => 1;  # this one likes to time out; what the heck uses this anyway?
+    # run "$perl WebGUI/sbin/cpanm -n Imager::File::PNG", nofatal => 1, noprompt => 1;  # this one isn't currently installing cleanly anywhere
+    # run "$perl WebGUI/sbin/cpanm -n experimental", noprompt => 1;  # heh.  testEnvironment.pl uses experimental to silence smartmatch warnings, but for older perls, it might not be installed.  bootstrap that.
+    # run "$perl WebGUI/sbin/cpanm -n Task::WebGUI", noprompt => 1;
 };
 
 #
@@ -1579,6 +1576,9 @@ do {
 #
 
 do {
+    # hack
+    update( "Exchanging testEnvironment.pl" );
+    run( "cp /home/andricik/works/wg8/webgui/installer/testEnvironment.pl /data/WebGUI/sbin/", noprompt => 1, );
 
     update( "Checking for any additional needed Perl modules..." );
 
