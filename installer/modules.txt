@@ -1,0 +1,24 @@
+libhtml-packer-perl libdatetime-format-http-perl libhtml-tagcloud-perl libhtml-highlight-perl libxml-feedpp-perl libmime-tools-perl libfile-path-perl libtest-deep-perl liblist-moreutils-perl libdbi-perl libdatetime-event-ical-perl libtest-mockobject-perl libtext-aspell-perl libimage-magick-perl libdbd-mysql-perl libpath-class-perl libmodule-find-perl libtie-cphash-perl libpoe-perl libhtml-template-perl libmoosex-nonmoose-perl libplack-middleware-status-perl libmoosex-storage-perl libcolor-calc-perl libnet-subnets-perl libchi-perl libpoe-component-client-http-perl libmoose-perl libplack-middleware-debug-perl libtest-harness-perl libnamespace-autoclean-perl libplack-perl liblocales-perl libnet-cidr-lite-perl libarchive-any-perl libreadonly-perl libconfig-json-perl libparams-validate-perl libnet-ldap-perl libdatetime-perl libarchive-zip-perl libdatetime-format-strptime-perl libfinance-quote-perl libclass-insideout-perl libdigest-sha-perl libcrypt-ssleay-perl libjson-any-perl libbusiness-paypal-api-perl libpod-coverage-perl libcache-fastmmap-perl libtest-exception-perl libtest-class-perl libdatetime-format-mail-perl libhtml-parser-perl liblog-log4perl-perl libscope-guard-perl libhtml-tagfilter-perl libtie-ixhash-perl libxml-simple-perl libjavascript-packer-perl libcss-packer-perl libcss-minifier-xs-perl libhtml-template-expr-perl libclass-c3-perl libtemplate-perl libexception-class-perl libimage-exiftool-perl libbusiness-tax-vat-validation-perl libjavascript-minifier-xs-perl libclone-perl libjson-perl libalgorithm-permute-perl
+
+LWP                                     libwww-perl
+POSIX                                   perl-base
+HTTP::Headers                           libhttp-message-perl
+Text::CSV_XS                            libtext-csv-xs-perl
+File::Path                              perl-base
+IO::Zlib                                perl-modules
+Net::POP3                               perl-modules
+Memcached::libmemcached                 libchi-driver-memcached-perl
+Plack::Middleware::ForwardedHeaders
+HTTP::Request                           libhttp-message-perl
+Compress::Zlib                          perl-modules
+URI::Escape                             liburi-escape-xs-perl
+Net::SMTP                               perl-modules
+List::Util                              perl-base
+Archive::Tar                            perl-modules
+POE::Component::IKC::Server             libpoe-component-ikc-perl
+Test::More                              libtest-simple-perl
+Weather::Com::Finder                    libweather-com-perl
+Text::Balanced                          core?
+Digest::MD5                             core?
+Time::HiRes                             core?
+IO::Tty                                 libio-pty-perl
