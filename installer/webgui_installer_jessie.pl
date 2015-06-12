@@ -1408,7 +1408,7 @@ progress(25);
 do {
     if( $os eq 'debian' ) {
 
-        run "apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx", noprompt => 1;
+        run "apt-get install -y perlmagick libssl-dev libexpat1-dev git curl nginx starman libwww-mechanize-perl", noprompt => 1;
 
         # debian packages of requires modules, 1:1 correspondence
         run "apt-get install -y libhtml-packer-perl libdatetime-format-http-perl libhtml-tagcloud-perl libhtml-highlight-perl libxml-feedpp-perl libmime-tools-perl libfile-path-perl libtest-deep-perl liblist-moreutils-perl libdbi-perl libdatetime-event-ical-perl libtest-mockobject-perl libtext-aspell-perl libimage-magick-perl libdbd-mysql-perl libpath-class-perl libmodule-find-perl libtie-cphash-perl libpoe-perl libhtml-template-perl libmoosex-nonmoose-perl libplack-middleware-status-perl libmoosex-storage-perl libcolor-calc-perl libnet-subnets-perl libchi-perl libpoe-component-client-http-perl libmoose-perl libplack-middleware-debug-perl libtest-harness-perl libnamespace-autoclean-perl libplack-perl liblocales-perl libnet-cidr-lite-perl libarchive-any-perl libreadonly-perl libconfig-json-perl libparams-validate-perl libnet-ldap-perl libdatetime-perl libarchive-zip-perl libdatetime-format-strptime-perl libfinance-quote-perl libclass-insideout-perl libdigest-sha-perl libcrypt-ssleay-perl libjson-any-perl libbusiness-paypal-api-perl libpod-coverage-perl libcache-fastmmap-perl libtest-exception-perl libtest-class-perl libdatetime-format-mail-perl libhtml-parser-perl liblog-log4perl-perl libscope-guard-perl libhtml-tagfilter-perl libtie-ixhash-perl libxml-simple-perl libjavascript-packer-perl libcss-packer-perl libcss-minifier-xs-perl libhtml-template-expr-perl libclass-c3-perl libtemplate-perl libexception-class-perl libimage-exiftool-perl libbusiness-tax-vat-validation-perl libjavascript-minifier-xs-perl libclone-perl libjson-perl libalgorithm-permute-perl libio-pty-perl", noprompt => 1;
@@ -1577,8 +1577,8 @@ do {
 
 do {
     # hack
-    update( "Exchanging testEnvironment.pl" );
-    run( "cp /home/andricik/works/wg8/webgui/installer/testEnvironment.pl /data/WebGUI/sbin/", noprompt => 1, );
+    update( "Skip Image::Magick test in testEnvironment.pl" );
+    run q{sed -i -e 's/^checkModule("Image::Magick"/# checkModule("Image::Magick"/' /data/WebGUI/sbin/testEnvironment.pl};
 
     update( "Checking for any additional needed Perl modules..." );
 
